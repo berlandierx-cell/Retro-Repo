@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Retro ISO</title>
+<style>
+:root{--bg:#0e2427;--panel:#17363b;--line:#2f5a60;--text:#e9f1ef;--mute:#9bb5b1;--amber:#f0b03c;--ink:#1b1405}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.45 Tahoma,Verdana,system-ui,sans-serif;min-height:100vh;
+  padding:max(20px,env(safe-area-inset-top)) 20px max(20px,env(safe-area-inset-bottom))}
+main{max-width:1000px;margin:0 auto}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
+h1{font-size:1.9rem;margin:0;letter-spacing:-.01em}
+.btn{font:inherit;font-weight:700;background:var(--amber);color:var(--ink);border:0;border-radius:6px;padding:10px 16px;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.btn.ghost{background:transparent;color:var(--text);border:1px solid var(--line)}
+.btn:focus-visible,input:focus-visible+label{outline:3px solid #fff;outline-offset:2px}
+#banner{background:var(--panel);border-left:4px solid var(--amber);border-radius:4px;padding:10px 14px;margin-bottom:20px;color:var(--mute)}
+#banner[hidden]{display:none}
+#grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:16px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 6px 6px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center}
+.tile h2{font-size:1.05rem;margin:4px 0 0}
+.meta{color:var(--mute);font-size:.85rem;margin:0}
+.tile .btn{width:100%;margin-top:auto}
+.disc{--h:200;width:120px;aspect-ratio:1;border-radius:50%;
+  background:
+    radial-gradient(circle,var(--bg) 0 11%,rgba(255,255,255,.65) 11% 14%,hsl(var(--h) 60% 42%) 14% 40%,transparent 41%),
+    conic-gradient(from 20deg,#dfe8e6,#9fb4b1,#f4f8f7,#8aa09d,#dfe8e6,#b9cbc8,#f4f8f7,#9fb4b1,#dfe8e6)}
+.disc.spin{animation:spin 1.2s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.disc.spin{animation:none;outline:3px solid var(--amber)}}
+#empty{color:var(--mute);padding:40px 0;text-align:center}
+#toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translateX(-50%);background:#fff;color:#111;
+  padding:10px 16px;border-radius:6px;max-width:90vw;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+input[type=file]{position:absolute;opacity:0;width:1px;height:1px}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mes jeux</h1>
+    <span>
+      <input id="file" type="file" accept=".iso">
+      <button class="btn" id="add" type="button">Ajouter un ISO</button>
+    </span>
+  </header>
+  <div id="banner" role="status" hidden></div>
+  <section id="grid" aria-label="Bibliothèque"></section>
+  <p id="empty" hidden>Aucun jeu dans RetroGames. Ajoute un ISO pour commencer.</p>
+</main>
+<div id="toast" role="status" aria-live="polite"></div>
+
+<script>
+// Liste de départ (tes vrais jeux), utilisée tant que le moteur local ne répond pas.
+const SEED = [
+  {id:'gangsters-2', name:'Gangsters 2'},
+  {id:'icewind-dale-2', name:'Icewind Dale 2'},
+  {id:'iznogoud', name:'Iznogoud'}
+].map(g => ({...g, installed:false, save:'none'}));
+
+const SAVE_TEXT = {
+  none:'Aucune sauvegarde',
+  synced:'Sauvegarde à jour',
+  'local-newer':'Sauvegarde locale à envoyer',
+  'drive-newer':'Sauvegarde Drive plus récente'
+};
+
+const $ = id => document.getElementById(id);
+let online = false;
+
+function toast(msg){
+  const t = $('toast'); t.textContent = msg; t.classList.add('on');
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove('on'), 3500);
+}
+
+async function api(path, opts = {}){
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 2500);
+  try {
+    const r = await fetch(path, {...opts, signal: ctl.signal});
+    if (!r.ok) { const e = new Error('HTTP ' + r.status); try { e.engineMsg = (await r.json()).error; } catch {} throw e; }
+    return await r.json();
+  } finally { clearTimeout(timer); }
+}
+
+function hue(name){
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 360;
+  return h;
+}
+
+function tile(g){
+  const el = document.createElement('article'); el.className = 'tile';
+  const disc = document.createElement('div'); disc.className = 'disc';
+  disc.style.setProperty('--h', hue(g.name));
+  const h2 = document.createElement('h2'); h2.textContent = g.name;
+  const p1 = document.createElement('p'); p1.className = 'meta';
+  p1.textContent = g.busy || (g.installed ? 'Installé sur cet appareil' : 'Sur Drive, pas encore installé');
+  const p2 = document.createElement('p'); p2.className = 'meta';
+  p2.textContent = SAVE_TEXT[g.save] || SAVE_TEXT.none;
+  const b = document.createElement('button'); b.className = 'btn'; b.type = 'button';
+  b.textContent = g.installed ? 'Jouer' : 'Installer et jouer';
+  b.onclick = () => play(g, disc, b);
+  if (g.busy) { disc.classList.add('spin'); b.disabled = true; }
+  el.append(disc, h2, p1, p2);
+  if (g.error) { const pe = document.createElement('p'); pe.className = 'meta'; pe.style.color = '#ffb4a8'; pe.textContent = g.error; el.append(pe); }
+  el.append(b);
+  return el;
+}
+
+function render(games){
+  $('grid').replaceChildren(...games.map(tile));
+  $('empty').hidden = games.length > 0;
+}
+
+async function play(g, disc, btn){
+  btn.disabled = true;
+  try {
+    await api('/api/games/' + encodeURIComponent(g.id) + '/play', {method:'POST'});
+    load();
+  } catch (e) {
+    btn.disabled = false;
+    toast(e.engineMsg || 'Le moteur n\u2019est pas démarré : impossible de lancer ' + g.name + '.');
+  }
+}
+
+async function load(){
+  try {
+    const games = await api('/api/games');
+    online = true; $('banner').hidden = true; render(games);
+    if (games.some(g => g.busy)) setTimeout(load, 1500);
+  } catch (e) {
+    if (e.engineMsg) { $('banner').hidden = false; $('banner').textContent = 'Moteur : ' + e.engineMsg; render([]); return; }
+    online = false;
+    $('banner').hidden = false;
+    $('banner').textContent = 'Moteur non démarré : voici ta liste de départ. Jouer et Ajouter fonctionneront dès que le moteur tournera sur cet appareil.';
+    render(SEED);
+  }
+}
+
+$('add').onclick = () => $('file').click();
+$('file').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  toast('Envoi de ' + f.name + ' vers Drive\u2026');
+  try {
+    await fetch('/api/games', {method:'POST', headers:{'X-Filename': encodeURIComponent(f.name)}, body:f}).then(r => { if (!r.ok) throw 0; });
+    toast(f.name + ' ajouté.'); load();
+  } catch {
+    toast('Le moteur n\u2019est pas démarré : impossible d\u2019ajouter ' + f.name + '.');
+  }
+  e.target.value = '';
+};
+
+load();
+</script>
+</body>
+</html>
