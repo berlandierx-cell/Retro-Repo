@@ -1,5 +1,6 @@
 package com.elmagnifico.retroiso
 
+import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -33,9 +34,27 @@ class MainActivity : ComponentActivity() {
 }
 
 fun launchWinlator(ctx: Context): String? {
-    val i = ctx.packageManager.getLaunchIntentForPackage("com.winlator") ?: return "Winlator n'est pas installé."
+    val i = ctx.packageManager.getLaunchIntentForPackage("com.winlator")
+        ?: return "Winlator n'est pas installé."
     ctx.startActivity(i)
     return null
+}
+
+/** Lance directement un raccourci Winlator si la version installée expose cette activité. */
+fun launchWinlatorShortcut(ctx: Context, shortcutPath: String): String? {
+    return try {
+        val intent = Intent().apply {
+            setClassName("com.winlator", "com.winlator.XServerDisplayActivity")
+            putExtra("shortcut_path", shortcutPath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+        null
+    } catch (_: ActivityNotFoundException) {
+        "Cette version de Winlator n'accepte pas le lancement direct. Ouvre Winlator une fois pour vérifier le raccourci."
+    } catch (e: Exception) {
+        "Impossible de lancer le raccourci Winlator : ${e.message}"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -48,6 +67,7 @@ fun App(store: GameStore) {
     var message by remember { mutableStateOf<String?>(null) }
     var playing by remember { mutableStateOf<Game?>(null) }
     var patchFor by remember { mutableStateOf<Game?>(null) }
+    var shortcutFor by remember { mutableStateOf<Game?>(null) }
 
     val isoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -62,6 +82,7 @@ fun App(store: GameStore) {
             }
         }
     }
+
     val patchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         val g = patchFor
         if (uri != null && g != null) scope.launch {
@@ -74,10 +95,28 @@ fun App(store: GameStore) {
         }
     }
 
+    val shortcutPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        val g = shortcutFor
+        if (uri != null && g != null) scope.launch {
+            try {
+                store.attachWinlatorShortcut(g, uri)
+                games = store.load()
+                message = "Raccourci Winlator associé. Le bouton Jouer tentera désormais le lancement direct."
+            } catch (e: Exception) {
+                message = "Erreur : ${e.message}"
+            }
+        }
+    }
+
     fun needFiles(): Boolean {
         if (Environment.isExternalStorageManager()) return false
-        message = "Autorise « Accès à tous les fichiers » pour Retro ISO, puis reviens ici et recommence."
-        ctx.startActivity(Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:${ctx.packageName}")))
+        message = "Autorise « Accès à tous les fichiers » pour Retro ISO, puis reviens ici."
+        ctx.startActivity(
+            Intent(
+                Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                Uri.parse("package:${ctx.packageName}")
+            )
+        )
         return true
     }
 
@@ -99,17 +138,37 @@ fun App(store: GameStore) {
                 )
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Adaptive(160.dp),
+                    columns = GridCells.Adaptive(170.dp),
                     contentPadding = PaddingValues(12.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(games, key = { it.id }) { g ->
                         GameCard(
-                            g,
-                            onPlay = { playing = g },
-                            onPatch = { if (!needFiles()) { patchFor = g; patchPicker.launch(arrayOf("*/*")) } },
-                            onDelete = { store.delete(g); games = store.load() }
+                            game = g,
+                            onPlay = {
+                                if (!g.shortcutPath.isNullOrBlank()) {
+                                    message = launchWinlatorShortcut(ctx, g.shortcutPath)
+                                } else {
+                                    playing = g
+                                }
+                            },
+                            onShortcut = {
+                                if (!needFiles()) {
+                                    shortcutFor = g
+                                    shortcutPicker.launch(arrayOf("*/*"))
+                                }
+                            },
+                            onPatch = {
+                                if (!needFiles()) {
+                                    patchFor = g
+                                    patchPicker.launch(arrayOf("*/*"))
+                                }
+                            },
+                            onDelete = {
+                                store.delete(g)
+                                games = store.load()
+                            }
                         )
                     }
                 }
@@ -121,19 +180,43 @@ fun App(store: GameStore) {
         AlertDialog(
             onDismissRequest = {},
             confirmButton = {},
-            title = { Text("Extraction de l'ISO…") },
-            text = { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth()) }
+            title = { Text("Préparation du jeu…") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Copie de l'ISO puis extraction du CD.")
+                    LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth())
+                }
+            }
         )
     }
+
     playing?.let { g ->
+        val isoPath = store.isoFile(g)?.absolutePath ?: "ISO non conservé (réimporte ce jeu avec la nouvelle version)"
+        val installer = g.installer ?: "Autorun.exe / setup.exe"
         AlertDialog(
             onDismissRequest = { playing = null },
             title = { Text(g.name) },
-            text = { Text("Dans Winlator, ouvre le lecteur D:, puis le dossier RetroIso/${g.dir}, et lance setup.exe (le patch est dans le sous-dossier Patch).") },
-            confirmButton = { TextButton(onClick = { message = launchWinlator(ctx); playing = null }) { Text("Ouvrir Winlator") } },
-            dismissButton = { TextButton(onClick = { playing = null }) { Text("Fermer") } }
+            text = {
+                Text(
+                    "Première configuration Winlator :\n\n" +
+                    "1. Monte l'image disque suivante dans le lecteur CD X:\n$isoPath\n\n" +
+                    "2. Lance X:\\$installer\n\n" +
+                    "3. Quand le jeu est installé, crée un raccourci Winlator vers son .exe. " +
+                    "Reviens ensuite ici et utilise « Associer raccourci » une seule fois."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    message = launchWinlator(ctx)
+                    playing = null
+                }) { Text("Ouvrir Winlator") }
+            },
+            dismissButton = {
+                TextButton(onClick = { playing = null }) { Text("Fermer") }
+            }
         )
     }
+
     message?.let {
         AlertDialog(
             onDismissRequest = { message = null },
@@ -144,11 +227,23 @@ fun App(store: GameStore) {
 }
 
 @Composable
-fun GameCard(game: Game, onPlay: () -> Unit, onPatch: () -> Unit, onDelete: () -> Unit) {
+fun GameCard(
+    game: Game,
+    onPlay: () -> Unit,
+    onShortcut: () -> Unit,
+    onPatch: () -> Unit,
+    onDelete: () -> Unit
+) {
     Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+            Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             Text(game.name, style = MaterialTheme.typography.titleMedium, minLines = 2, maxLines = 2)
+            if (!game.iso.isNullOrBlank()) Text("ISO prêt", style = MaterialTheme.typography.bodySmall)
+            if (!game.shortcutPath.isNullOrBlank()) Text("Winlator prêt", style = MaterialTheme.typography.bodySmall)
             Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) { Text("Jouer") }
+            OutlinedButton(onClick = onShortcut, modifier = Modifier.fillMaxWidth()) { Text("Associer raccourci") }
             OutlinedButton(onClick = onPatch, modifier = Modifier.fillMaxWidth()) { Text("Ajouter un patch") }
             TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Supprimer") }
         }
