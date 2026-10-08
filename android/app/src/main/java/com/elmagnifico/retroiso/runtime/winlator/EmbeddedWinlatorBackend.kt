@@ -7,7 +7,9 @@ import com.elmagnifico.retroiso.runtime.GameProfile
 import com.winlator.XServerDisplayActivity
 import com.winlator.container.Container
 import com.winlator.container.ContainerManager
+import com.winlator.core.DefaultVersion
 import com.winlator.core.FileUtils
+import com.winlator.core.GeneralComponents
 import com.winlator.core.TarCompressorUtils
 import com.winlator.core.WineRegistryEditor
 import com.winlator.core.WineUtils
@@ -114,6 +116,35 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         )
         check(ok) { "Impossible d'installer le moteur Wine/Box64 intégré." }
         rootFs.createRFSVersionFile(19)
+
+        installAndVerifyRuntime(rootFs)
+    }
+
+    private fun installAndVerifyRuntime(rootFs: RootFS) {
+        // Winlator installe Box64 dynamiquement au premier lancement. Retro ISO
+        // le fait explicitement afin d'éviter un échec silencieux avant Wine.
+        GeneralComponents.extractFile(
+            GeneralComponents.Type.BOX64,
+            context,
+            DefaultVersion.BOX64,
+            DefaultVersion.BOX64
+        )
+
+        val root = rootFs.rootDir
+        val box64 = File(root, "usr/local/bin/box64")
+        val wine = File(root, "opt/wine/bin/wine")
+        val wine64 = File(root, "opt/wine/bin/wine64")
+
+        check(box64.isFile) {
+            "Box64 introuvable après installation : " + box64.absolutePath
+        }
+        check(wine.isFile || wine64.isFile) {
+            "Wine introuvable après installation dans " + File(root, "opt/wine/bin").absolutePath
+        }
+
+        FileUtils.chmod(box64, 0771)
+        if (wine.isFile) FileUtils.chmod(wine, 0771)
+        if (wine64.isFile) FileUtils.chmod(wine64, 0771)
     }
 
     private suspend fun getOrCreateContainer(
