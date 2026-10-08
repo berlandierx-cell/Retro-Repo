@@ -1,7 +1,7 @@
 {
   "id": "gangsters-2",
   "name": "Gangsters 2",
-  "windows": "win98",
+  "windows": "win2k",
   "arch": "x86",
   "cdrom": {
     "required": true,
