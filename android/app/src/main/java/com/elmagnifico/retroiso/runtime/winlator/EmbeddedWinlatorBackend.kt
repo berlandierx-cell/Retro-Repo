@@ -152,12 +152,12 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
         // Test d'exécution natif avant d'ouvrir XServerDisplayActivity.
         val probe = try {
-            ProcessBuilder(nativeBox64.absolutePath, "--version")
+            ProcessBuilder("/system/bin/linker64", nativeBox64.absolutePath, "--version")
                 .redirectErrorStream(true)
                 .start()
         } catch (e: Exception) {
             throw IllegalStateException(
-                "Android refuse encore de lancer Box64 natif : " +
+                "Android refuse de lancer Box64 via linker64 : " +
                     e.javaClass.simpleName + ": " + (e.message ?: "erreur inconnue")
             )
         }
