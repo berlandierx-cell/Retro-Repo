@@ -14,6 +14,24 @@ git -C "$RUNTIME_DIR" remote add origin "$UPSTREAM"
 git -C "$RUNTIME_DIR" fetch -q --depth 1 origin "$PIN"
 git -C "$RUNTIME_DIR" checkout -q --detach FETCH_HEAD
 
+# Android 10+ may refuse exec() from app-private writable storage.
+# Package Box64 as a native library so Android installs it in nativeLibraryDir,
+# which is an executable code location.
+BOX64_ARCHIVE="$RUNTIME_DIR/app/src/main/assets/box64/box64-0.4.0.tzst"
+BOX64_TMP="$RUNTIME_DIR/.retroiso-box64"
+BOX64_JNI="$RUNTIME_DIR/app/src/main/jniLibs/arm64-v8a"
+rm -rf "$BOX64_TMP"
+mkdir -p "$BOX64_TMP" "$BOX64_JNI"
+
+tar --zstd -xf "$BOX64_ARCHIVE" -C "$BOX64_TMP"
+BOX64_BIN="$(find "$BOX64_TMP" -type f -name box64 | head -n 1)"
+if [ -z "$BOX64_BIN" ]; then
+  echo "Unable to locate Box64 binary inside $BOX64_ARCHIVE" >&2
+  exit 1
+fi
+cp "$BOX64_BIN" "$BOX64_JNI/libbox64.so"
+chmod 0755 "$BOX64_JNI/libbox64.so"
+
 python3 - "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" <<'PY'
 from pathlib import Path
 import sys
