@@ -1,0 +1,14 @@
+{
+  "id": "gangsters-2",
+  "name": "Gangsters 2",
+  "windows": "win98",
+  "arch": "x86",
+  "cdrom": {
+    "required": true,
+    "drive": "X:",
+    "image": "disc.iso"
+  },
+  "installer": "Autorun.exe",
+  "executable": "Gangsters2.exe",
+  "patch": "1.0.7"
+}
