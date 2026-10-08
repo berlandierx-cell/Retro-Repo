@@ -86,6 +86,27 @@ if needle2 not in s:
 s = s.replace(needle2, replacement2, 1)
 
 p.write_text(s)
+
+# Expose native ProcessBuilder/exec failures instead of swallowing them.
+ph = Path("$RUNTIME_DIR/app/src/main/java/com/winlator/core/ProcessHelper.java")
+ps = ph.read_text()
+old = '''        catch (Exception e) {}
+        return pid;
+'''
+new = '''        catch (Exception e) {
+            String msg = "RETROISO_EXEC_EXCEPTION: " + e.getClass().getSimpleName() + ": " + String.valueOf(e.getMessage());
+            synchronized (debugCallbacks) {
+                if (!debugCallbacks.isEmpty()) {
+                    for (Callback<String> callback : debugCallbacks) callback.call(msg);
+                }
+                else System.err.println(msg);
+            }
+        }
+        return pid;
+'''
+if old not in ps:
+    raise SystemExit("Retro ISO ProcessHelper patch point not found")
+ph.write_text(ps.replace(old, new, 1))
 PY
 
 echo "Winlator sources prepared at $RUNTIME_DIR ($PIN) with Retro ISO diagnostics"
