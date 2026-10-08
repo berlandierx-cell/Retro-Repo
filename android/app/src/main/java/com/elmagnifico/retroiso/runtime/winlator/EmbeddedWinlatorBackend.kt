@@ -103,20 +103,21 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val rootFs = RootFS.find(context)
 
         // Winlator 11.2 app submodule utilise actuellement RFS version 19.
-        if (rootFs.isValid() && rootFs.version >= 19) return@withContext
+        if (!rootFs.isValid() || rootFs.version < 19) {
+            val root = rootFs.rootDir
+            if (!root.isDirectory) root.mkdirs()
 
-        val root = rootFs.rootDir
-        if (!root.isDirectory) root.mkdirs()
+            val ok = TarCompressorUtils.extract(
+                TarCompressorUtils.Type.ZSTD,
+                context,
+                "rootfs.tzst",
+                root
+            )
+            check(ok) { "Impossible d'installer le moteur Wine/Box64 intégré." }
+            rootFs.createRFSVersionFile(19)
+        }
 
-        val ok = TarCompressorUtils.extract(
-            TarCompressorUtils.Type.ZSTD,
-            context,
-            "rootfs.tzst",
-            root
-        )
-        check(ok) { "Impossible d'installer le moteur Wine/Box64 intégré." }
-        rootFs.createRFSVersionFile(19)
-
+        // Toujours vérifier le runtime, même si le rootfs existait déjà.
         installAndVerifyRuntime(rootFs)
     }
 
@@ -145,6 +146,25 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         FileUtils.chmod(box64, 0x1F9)
         if (wine.isFile) FileUtils.chmod(wine, 0x1F9)
         if (wine64.isFile) FileUtils.chmod(wine64, 0x1F9)
+
+        // Test d'exécution natif avant d'ouvrir XServerDisplayActivity.
+        // On veut une erreur Android explicite au lieu d'un spinner infini.
+        val probe = try {
+            ProcessBuilder(box64.absolutePath, "--version")
+                .redirectErrorStream(true)
+                .start()
+        } catch (e: Exception) {
+            throw IllegalStateException(
+                "Android refuse de lancer Box64 : " +
+                    e.javaClass.simpleName + ": " + (e.message ?: "erreur inconnue")
+            )
+        }
+
+        val output = probe.inputStream.bufferedReader().use { it.readText() }.trim()
+        val status = probe.waitFor()
+        check(status == 0) {
+            "Box64 présent mais inutilisable (code " + status + ") : " + output
+        }
     }
 
     private suspend fun getOrCreateContainer(
