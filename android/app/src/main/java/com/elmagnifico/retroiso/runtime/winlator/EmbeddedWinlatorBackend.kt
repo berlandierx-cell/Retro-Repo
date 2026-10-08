@@ -20,19 +20,14 @@ import java.io.File
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
-/**
- * Adapter Retro ISO -> moteur Winlator embarqué.
- *
- * Aucun appel vers l'application com.winlator installée séparément :
- * XServerDisplayActivity, Wine, Box64 et le rootfs appartiennent au même APK.
- */
 class EmbeddedWinlatorBackend(private val context: Context) {
 
     data class PreparedContainer(
         val containerId: Int,
         val containerName: String,
         val isoFile: File,
-        val installerDosPath: String
+        val installerDosPath: String,
+        val bootstrapFile: File
     )
 
     suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
@@ -42,14 +37,25 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         ensureRootFs()
 
         val container = getOrCreateContainer(gameDir, profile)
-        configureContainer(container, profile)
+        configureContainer(container, gameDir, profile)
+        val bootstrap = createInstallBootstrap(gameDir, profile)
 
         return PreparedContainer(
             containerId = container.id,
             containerName = container.name,
             isoFile = iso,
-            installerDosPath = profile.cdRom.drive + "\\" + profile.installer
+            installerDosPath = profile.cdRom.drive + "\\" + profile.installer,
+            bootstrapFile = bootstrap
         )
+    }
+
+    fun launchInstaller(prepared: PreparedContainer) {
+        val intent = Intent(context, XServerDisplayActivity::class.java).apply {
+            putExtra("container_id", prepared.containerId)
+            putExtra("exec_path", prepared.bootstrapFile.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
     }
 
     fun launchIso(prepared: PreparedContainer) {
@@ -64,7 +70,6 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     fun launchDosPath(prepared: PreparedContainer, dosPath: String) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
-            // Patched into the embedded runtime by bootstrap-winlator-runtime.sh.
             putExtra("retroiso_dos_path", dosPath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -95,7 +100,11 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val manager = withContext(Dispatchers.IO) { ContainerManager(context) }
         val wantedName = "retroiso-" + profile.id
 
-        manager.containers.firstOrNull { it.name == wantedName }?.let { return it }
+        manager.containers.firstOrNull { it.name == wantedName }?.let {
+            it.drives = "D:" + gameDir.absolutePath
+            it.saveData()
+            return it
+        }
 
         return withContext(Dispatchers.Main) {
             suspendCancellableCoroutine { continuation ->
@@ -122,9 +131,10 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
     private suspend fun configureContainer(
         container: Container,
+        gameDir: File,
         profile: GameProfile
     ) = withContext(Dispatchers.IO) {
-        // X: existe physiquement dans le prefix et Wine le voit comme CD-ROM.
+        container.drives = "D:" + gameDir.absolutePath
         WineUtils.createDosdevicesSymlinks(container, true)
 
         val systemReg = File(container.rootDir, ".wine/system.reg")
@@ -137,5 +147,31 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         if (index >= 0) WineUtils.setWinVersion(container, index)
 
         container.saveData()
+    }
+
+    private suspend fun createInstallBootstrap(
+        gameDir: File,
+        profile: GameProfile
+    ): File = withContext(Dispatchers.IO) {
+        val bootstrap = File(gameDir, "_retroiso_install.bat")
+        val isoDosPath = "D:\\" + profile.cdRom.image
+        val installer = profile.cdRom.drive + "\\" + profile.installer
+
+        bootstrap.writeText(
+            """
+            @echo off
+            echo Retro ISO - montage du CD...
+            start "" "$isoDosPath"
+            ping 127.0.0.1 -n 4 >nul
+            if exist "$installer" (
+              start "" "$installer"
+            ) else (
+              echo Le CD n'est pas encore disponible dans ${profile.cdRom.drive}
+              explorer ${profile.cdRom.drive}\
+            )
+            """.trimIndent(),
+            Charsets.ISO_8859_1
+        )
+        bootstrap
     }
 }
