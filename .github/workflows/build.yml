@@ -18,6 +18,13 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Install ELF patch tool
+        run: |
+          if ! command -v patchelf >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y patchelf
+          fi
+
       - name: Prepare embedded Winlator runtime
         run: |
           chmod +x bootstrap-winlator-runtime.sh
