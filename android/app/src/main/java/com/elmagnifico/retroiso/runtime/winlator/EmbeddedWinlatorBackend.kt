@@ -132,30 +132,32 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         )
 
         val root = rootFs.rootDir
-        val box64 = File(root, "usr/local/bin/box64")
+        val rootBox64 = File(root, "usr/local/bin/box64")
+        val nativeBox64 = File(context.applicationInfo.nativeLibraryDir, "libbox64.so")
         val wine = File(root, "opt/wine/bin/wine")
         val wine64 = File(root, "opt/wine/bin/wine64")
 
-        check(box64.isFile) {
-            "Box64 introuvable après installation : " + box64.absolutePath
+        check(nativeBox64.isFile) {
+            "Box64 natif absent de l'APK : " + nativeBox64.absolutePath
         }
         check(wine.isFile || wine64.isFile) {
             "Wine introuvable après installation dans " + File(root, "opt/wine/bin").absolutePath
         }
 
-        FileUtils.chmod(box64, 0x1F9)
-        if (wine.isFile) FileUtils.chmod(wine, 0x1F9)
-        if (wine64.isFile) FileUtils.chmod(wine64, 0x1F9)
+        // Le rootfs reste inscriptible/non-exécutable. On garde le chemin attendu
+        // par Winlator, mais il pointe vers la copie native exécutable de l'APK.
+        FileUtils.delete(rootBox64)
+        rootBox64.parentFile?.mkdirs()
+        FileUtils.symlink(nativeBox64.absolutePath, rootBox64.absolutePath)
 
         // Test d'exécution natif avant d'ouvrir XServerDisplayActivity.
-        // On veut une erreur Android explicite au lieu d'un spinner infini.
         val probe = try {
-            ProcessBuilder(box64.absolutePath, "--version")
+            ProcessBuilder(nativeBox64.absolutePath, "--version")
                 .redirectErrorStream(true)
                 .start()
         } catch (e: Exception) {
             throw IllegalStateException(
-                "Android refuse de lancer Box64 : " +
+                "Android refuse encore de lancer Box64 natif : " +
                     e.javaClass.simpleName + ": " + (e.message ?: "erreur inconnue")
             )
         }
@@ -163,7 +165,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val output = probe.inputStream.bufferedReader().use { it.readText() }.trim()
         val status = probe.waitFor()
         check(status == 0) {
-            "Box64 présent mais inutilisable (code " + status + ") : " + output
+            "Box64 natif présent mais inutilisable (code " + status + ") : " + output
         }
     }
 
