@@ -122,8 +122,6 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     private fun installAndVerifyRuntime(rootFs: RootFS) {
-        // Winlator installe Box64 dynamiquement au premier lancement. Retro ISO
-        // le fait explicitement afin d'éviter un échec silencieux avant Wine.
         GeneralComponents.extractFile(
             GeneralComponents.Type.BOX64,
             context,
@@ -132,40 +130,49 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         )
 
         val root = rootFs.rootDir
-        val rootBox64 = File(root, "usr/local/bin/box64")
-        val nativeBox64 = File(context.applicationInfo.nativeLibraryDir, "libbox64.so")
+        val box64 = File(root, "usr/local/bin/box64")
         val wine = File(root, "opt/wine/bin/wine")
         val wine64 = File(root, "opt/wine/bin/wine64")
 
-        check(nativeBox64.isFile) {
-            "Box64 natif absent de l'APK : " + nativeBox64.absolutePath
+        check(box64.isFile) {
+            "Box64 introuvable après installation : " + box64.absolutePath
         }
         check(wine.isFile || wine64.isFile) {
             "Wine introuvable après installation dans " + File(root, "opt/wine/bin").absolutePath
         }
 
-        // Le rootfs reste inscriptible/non-exécutable. On garde le chemin attendu
-        // par Winlator, mais il pointe vers la copie native exécutable de l'APK.
-        FileUtils.delete(rootBox64)
-        rootBox64.parentFile?.mkdirs()
-        FileUtils.symlink(nativeBox64.absolutePath, rootBox64.absolutePath)
+        FileUtils.chmod(box64, 0x1ED) // 0755
+        if (wine.isFile) FileUtils.chmod(wine, 0x1ED)
+        if (wine64.isFile) FileUtils.chmod(wine64, 0x1ED)
 
-        // Test d'exécution natif avant d'ouvrir XServerDisplayActivity.
+        val targetSdk = context.applicationInfo.targetSdkVersion
+        val selinux = try {
+            File("/proc/self/attr/current").readText().trim()
+        } catch (_: Exception) {
+            "inconnu"
+        }
+
+        val securityInfo =
+            "targetSdk=" + targetSdk +
+            ", SELinux=" + selinux +
+            ", canExecute=" + box64.canExecute() +
+            ", canRead=" + box64.canRead()
+
         val probe = try {
-            ProcessBuilder("/system/bin/linker64", nativeBox64.absolutePath, "--version")
+            ProcessBuilder(box64.absolutePath, "--version")
                 .redirectErrorStream(true)
                 .start()
         } catch (e: Exception) {
             throw IllegalStateException(
-                "Android refuse de lancer Box64 via linker64 : " +
-                    e.javaClass.simpleName + ": " + (e.message ?: "erreur inconnue")
+                "Box64 bloqué par Android. " + securityInfo + "\n\n" +
+                e.javaClass.simpleName + ": " + (e.message ?: "erreur inconnue")
             )
         }
 
         val output = probe.inputStream.bufferedReader().use { it.readText() }.trim()
         val status = probe.waitFor()
         check(status == 0) {
-            "Box64 natif présent mais inutilisable (code " + status + ") : " + output
+            "Box64 démarre mais retourne code " + status + ". " + securityInfo + "\n" + output
         }
     }
 
