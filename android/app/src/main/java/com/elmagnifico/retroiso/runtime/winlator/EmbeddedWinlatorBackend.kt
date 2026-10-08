@@ -152,11 +152,22 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             "inconnu"
         }
 
+        val fileContext = try {
+            val p = ProcessBuilder("/system/bin/ls", "-lZ", box64.absolutePath)
+                .redirectErrorStream(true)
+                .start()
+            p.inputStream.bufferedReader().use { it.readText() }.trim()
+        } catch (e: Exception) {
+            "ls -lZ indisponible: " + (e.message ?: "erreur inconnue")
+        }
+
         val securityInfo =
-            "targetSdk=" + targetSdk +
+            "Android=" + android.os.Build.VERSION.SDK_INT +
+            ", targetSdk=" + targetSdk +
             ", SELinux=" + selinux +
             ", canExecute=" + box64.canExecute() +
-            ", canRead=" + box64.canRead()
+            ", canRead=" + box64.canRead() +
+            "\nBox64: " + fileContext
 
         val probe = try {
             ProcessBuilder(box64.absolutePath, "--version")
