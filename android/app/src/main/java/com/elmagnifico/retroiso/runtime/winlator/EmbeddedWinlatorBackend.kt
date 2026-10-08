@@ -7,6 +7,7 @@ import com.elmagnifico.retroiso.runtime.GameProfile
 import com.winlator.XServerDisplayActivity
 import com.winlator.container.Container
 import com.winlator.container.ContainerManager
+import com.winlator.core.FileUtils
 import com.winlator.core.TarCompressorUtils
 import com.winlator.core.WineRegistryEditor
 import com.winlator.core.WineUtils
@@ -17,47 +18,76 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
+/**
+ * Backend Winlator embarqué dans Retro ISO.
+ *
+ * Stratégie actuelle:
+ * - D: = dossier du jeu Retro ISO
+ * - X: = contenu extrait du CD (<jeu>/CD)
+ * - X: déclaré "cdrom" dans le registre Wine
+ * - lancement direct de l'installeur extrait, sans .bat intermédiaire
+ *
+ * L'ISO original reste conservé dans disc.iso pour le futur montage raw/libcdio.
+ */
 class EmbeddedWinlatorBackend(private val context: Context) {
 
     data class PreparedContainer(
         val containerId: Int,
         val containerName: String,
         val isoFile: File,
-        val installerDosPath: String,
-        val bootstrapFile: File
+        val cdDir: File,
+        val installerFile: File,
+        val installerDosPath: String
     )
 
     suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
         val iso = File(gameDir, profile.cdRom.image)
         require(iso.isFile) { "ISO introuvable : " + iso.absolutePath }
 
+        val cdDir = File(gameDir, "CD")
+        require(cdDir.isDirectory) { "Contenu du CD introuvable : " + cdDir.absolutePath }
+
+        val installerFile = File(cdDir, profile.installer)
+        require(installerFile.isFile) {
+            "Installeur introuvable : " + installerFile.absolutePath
+        }
+
         ensureRootFs()
 
         val container = getOrCreateContainer(gameDir, profile)
-        configureContainer(container, gameDir, profile)
-        val bootstrap = createInstallBootstrap(gameDir, profile)
+        configureContainer(container, gameDir, cdDir, profile)
 
         return PreparedContainer(
             containerId = container.id,
             containerName = container.name,
             isoFile = iso,
-            installerDosPath = profile.cdRom.drive + "\\" + profile.installer,
-            bootstrapFile = bootstrap
+            cdDir = cdDir,
+            installerFile = installerFile,
+            installerDosPath = profile.cdRom.drive + "\\" + profile.installer
         )
     }
 
+    /**
+     * Lance directement le vrai Autorun.exe extrait.
+     * Comme X: pointe vers le même CD extrait et est typé CD-ROM,
+     * Wine voit immédiatement le média au démarrage de l'installeur.
+     */
     fun launchInstaller(prepared: PreparedContainer) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
-            putExtra("exec_path", prepared.bootstrapFile.absolutePath)
+            putExtra("exec_path", prepared.installerFile.absolutePath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
     }
 
+    /**
+     * Diagnostic uniquement : ouvre l'ISO via le mécanisme natif Winlator.
+     */
     fun launchIso(prepared: PreparedContainer) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
@@ -67,18 +97,11 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         context.startActivity(intent)
     }
 
-    fun launchDosPath(prepared: PreparedContainer, dosPath: String) {
-        val intent = Intent(context, XServerDisplayActivity::class.java).apply {
-            putExtra("container_id", prepared.containerId)
-            putExtra("retroiso_dos_path", dosPath)
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        context.startActivity(intent)
-    }
-
     private suspend fun ensureRootFs() = withContext(Dispatchers.IO) {
         val rootFs = RootFS.find(context)
-        if (rootFs.isValid() && rootFs.version >= 23) return@withContext
+
+        // Winlator 11.2 app submodule utilise actuellement RFS version 19.
+        if (rootFs.isValid() && rootFs.version >= 19) return@withContext
 
         val root = rootFs.rootDir
         if (!root.isDirectory) root.mkdirs()
@@ -90,7 +113,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             root
         )
         check(ok) { "Impossible d'installer le moteur Wine/Box64 intégré." }
-        rootFs.createRFSVersionFile(23)
+        rootFs.createRFSVersionFile(19)
     }
 
     private suspend fun getOrCreateContainer(
@@ -132,12 +155,31 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     private suspend fun configureContainer(
         container: Container,
         gameDir: File,
+        cdDir: File,
         profile: GameProfile
     ) = withContext(Dispatchers.IO) {
         container.drives = "D:" + gameDir.absolutePath
+
+        // Laisse Winlator créer les dosdevices standards.
         WineUtils.createDosdevicesSymlinks(container, true)
 
-        val systemReg = File(container.rootDir, ".wine/system.reg")
+        val wineDir = File(container.rootDir, ".wine")
+        val driveX = File(wineDir, "drive_x")
+
+        // Remplace le drive_x vide par un lien vers le vrai contenu extrait du CD.
+        FileUtils.delete(driveX)
+        FileUtils.symlink(cdDir.absolutePath, driveX.absolutePath)
+
+        // Le serial est utilisé par Wine pour les lecteurs optiques.
+        val serial = String.format(Locale.ENGLISH, "%-8x", 'X'.code).replace(' ', '0')
+        FileUtils.writeString(File(cdDir, ".windows-serial"), serial + "\n")
+
+        // Réassure le lien DOS x: -> ../drive_x après remplacement.
+        val dosdevices = File(wineDir, "dosdevices")
+        FileUtils.delete(File(dosdevices, "x:"))
+        FileUtils.symlink("../drive_x", File(dosdevices, "x:").absolutePath)
+
+        val systemReg = File(wineDir, "system.reg")
         WineRegistryEditor(systemReg).use {
             it.setStringValue("Software\\Wine\\Drives", "x:", "cdrom")
         }
@@ -147,31 +189,5 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         if (index >= 0) WineUtils.setWinVersion(container, index)
 
         container.saveData()
-    }
-
-    private suspend fun createInstallBootstrap(
-        gameDir: File,
-        profile: GameProfile
-    ): File = withContext(Dispatchers.IO) {
-        val bootstrap = File(gameDir, "_retroiso_install.bat")
-        val isoDosPath = "D:\\" + profile.cdRom.image
-        val installer = profile.cdRom.drive + "\\" + profile.installer
-
-        bootstrap.writeText(
-            """
-            @echo off
-            echo Retro ISO - montage du CD...
-            start "" "$isoDosPath"
-            ping 127.0.0.1 -n 4 >nul
-            if exist "$installer" (
-              start "" "$installer"
-            ) else (
-              echo Le CD n'est pas encore disponible dans ${profile.cdRom.drive}
-              explorer ${profile.cdRom.drive}\
-            )
-            """.trimIndent(),
-            Charsets.ISO_8859_1
-        )
-        bootstrap
     }
 }
