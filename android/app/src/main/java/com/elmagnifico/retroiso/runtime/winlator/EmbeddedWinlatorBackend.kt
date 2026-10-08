@@ -142,9 +142,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             "Wine introuvable après installation dans " + File(root, "opt/wine/bin").absolutePath
         }
 
-        FileUtils.chmod(box64, 0771)
-        if (wine.isFile) FileUtils.chmod(wine, 0771)
-        if (wine64.isFile) FileUtils.chmod(wine64, 0771)
+        FileUtils.chmod(box64, 0x1F9)
+        if (wine.isFile) FileUtils.chmod(wine, 0x1F9)
+        if (wine64.isFile) FileUtils.chmod(wine64, 0x1F9)
     }
 
     private suspend fun getOrCreateContainer(
