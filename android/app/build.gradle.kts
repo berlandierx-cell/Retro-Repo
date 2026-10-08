@@ -4,12 +4,12 @@ plugins {
 }
 
 android {
-    // Winlator Java sources refer to com.winlator.R. The applicationId remains Retro ISO.
+    // Winlator Java sources refer to com.winlator.R. Runtime app id is com.retroiso.
     namespace = "com.winlator"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.elmagnifico.retroiso"
+        applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
         versionCode = 3
