@@ -161,12 +161,35 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             "ls -lZ indisponible: " + (e.message ?: "erreur inconnue")
         }
 
+        val directTrue = try {
+            val p = ProcessBuilder("/system/bin/true").start()
+            "systemTrue=" + p.waitFor()
+        } catch (e: Exception) {
+            "systemTrue=" + e.javaClass.simpleName + ":" + (e.message ?: "")
+        }
+
+        val copiedTrue = try {
+            val testFile = File(root, "tmp/retroiso_true")
+            testFile.parentFile?.mkdirs()
+            File("/system/bin/true").inputStream().use { input ->
+                testFile.outputStream().use { output -> input.copyTo(output) }
+            }
+            FileUtils.chmod(testFile, 0x1ED)
+            val p = ProcessBuilder(testFile.absolutePath).redirectErrorStream(true).start()
+            val out = p.inputStream.bufferedReader().use { it.readText() }.trim()
+            "copiedTrue=" + p.waitFor() + (if (out.isNotEmpty()) ":$out" else "")
+        } catch (e: Exception) {
+            "copiedTrue=" + e.javaClass.simpleName + ":" + (e.message ?: "")
+        }
+
         val securityInfo =
             "Android=" + android.os.Build.VERSION.SDK_INT +
             ", targetSdk=" + targetSdk +
             ", SELinux=" + selinux +
             ", canExecute=" + box64.canExecute() +
             ", canRead=" + box64.canRead() +
+            "\n" + directTrue +
+            "\n" + copiedTrue +
             "\nBox64: " + fileContext
 
         val probe = try {
