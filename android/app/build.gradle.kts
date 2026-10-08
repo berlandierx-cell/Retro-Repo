@@ -11,9 +11,9 @@ android {
     defaultConfig {
         applicationId = "com.elmagnifico.retroiso"
         minSdk = 30
-        targetSdk = 34
-        versionCode = 2
-        versionName = "0.2-runtime"
+        targetSdk = 28
+        versionCode = 3
+        versionName = "0.3-runtime-legacy-exec"
         ndk {
             abiFilters += "arm64-v8a"
         }
