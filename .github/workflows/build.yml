@@ -52,3 +52,5 @@ jobs:
         run: |
           gh release delete latest --yes --cleanup-tag || true
           gh release create latest app/build/outputs/apk/debug/app-debug.apk             --title "Retro ISO (runtime intégré)"             --notes "Build automatique avec runtime Winlator intégré"
+
+# runtime package path refresh
