@@ -1,20 +1,43 @@
 name: Build APK
 on: [push, workflow_dispatch]
+
 permissions:
   contents: write
+
 jobs:
   apk:
     runs-on: ubuntu-latest
-    defaults: {run: {working-directory: android}}
+    defaults:
+      run:
+        working-directory: android
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-java@v4
-        with: {distribution: temurin, java-version: 17}
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Prepare embedded Winlator runtime
+        run: |
+          chmod +x bootstrap-winlator-runtime.sh
+          ./bootstrap-winlator-runtime.sh
+
+      - name: Install Android native toolchain
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-35" "ndk;24.0.8215888" "cmake;3.22.1"
+
       - uses: gradle/actions/setup-gradle@v4
-        with: {gradle-version: 8.7}
-      - run: gradle assembleDebug --no-daemon
+        with:
+          gradle-version: 8.7
+
+      - name: Build Retro ISO with embedded runtime
+        run: gradle assembleDebug --no-daemon
+
       - name: Publier l'APK dans les Releases
-        env: {GH_TOKEN: "${{ github.token }}"}
+        env:
+          GH_TOKEN: "${{ github.token }}"
         run: |
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest app/build/outputs/apk/debug/app-debug.apk --title "Retro ISO (dernier build)" --notes "Build automatique"
+          gh release create latest app/build/outputs/apk/debug/app-debug.apk             --title "Retro ISO (runtime intégré)"             --notes "Build automatique avec runtime Winlator intégré"
