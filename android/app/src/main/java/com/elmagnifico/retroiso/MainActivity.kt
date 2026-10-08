@@ -23,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.elmagnifico.retroiso.runtime.RuntimeManager
 import kotlinx.coroutines.launch
 
 class MainActivity : ComponentActivity() {
@@ -40,7 +41,6 @@ fun launchWinlator(ctx: Context): String? {
     return null
 }
 
-/** Lance directement un raccourci Winlator si la version installée expose cette activité. */
 fun launchWinlatorShortcut(ctx: Context, shortcutPath: String): String? {
     return try {
         val intent = Intent().apply {
@@ -51,9 +51,9 @@ fun launchWinlatorShortcut(ctx: Context, shortcutPath: String): String? {
         ctx.startActivity(intent)
         null
     } catch (_: ActivityNotFoundException) {
-        "Cette version de Winlator n'accepte pas le lancement direct. Ouvre Winlator une fois pour vérifier le raccourci."
+        "Cette version de Winlator n'accepte pas le lancement direct."
     } catch (e: Exception) {
-        "Impossible de lancer le raccourci Winlator : ${e.message}"
+        "Impossible de lancer le raccourci Winlator : " + e.message
     }
 }
 
@@ -61,6 +61,7 @@ fun launchWinlatorShortcut(ctx: Context, shortcutPath: String): String? {
 @Composable
 fun App(store: GameStore) {
     val ctx = LocalContext.current
+    val runtime = remember { RuntimeManager(ctx) }
     val scope = rememberCoroutineScope()
     var games by remember { mutableStateOf(store.load()) }
     var progress by remember { mutableStateOf<Float?>(null) }
@@ -76,7 +77,7 @@ fun App(store: GameStore) {
                 store.importIso(uri) { progress = it }
                 games = store.load()
             } catch (e: Exception) {
-                message = "Erreur : ${e.message}"
+                message = "Erreur : " + e.message
             } finally {
                 progress = null
             }
@@ -88,9 +89,9 @@ fun App(store: GameStore) {
         if (uri != null && g != null) scope.launch {
             try {
                 store.copyPatch(g, uri)
-                message = "Patch copié dans RetroIso/${g.dir}/Patch."
+                message = "Patch copié dans RetroIso/" + g.dir + "/Patch."
             } catch (e: Exception) {
-                message = "Erreur : ${e.message}"
+                message = "Erreur : " + e.message
             }
         }
     }
@@ -101,9 +102,9 @@ fun App(store: GameStore) {
             try {
                 store.attachWinlatorShortcut(g, uri)
                 games = store.load()
-                message = "Raccourci Winlator associé. Le bouton Jouer tentera désormais le lancement direct."
+                message = "Raccourci Winlator associé."
             } catch (e: Exception) {
-                message = "Erreur : ${e.message}"
+                message = "Erreur : " + e.message
             }
         }
     }
@@ -114,7 +115,7 @@ fun App(store: GameStore) {
         ctx.startActivity(
             Intent(
                 Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                Uri.parse("package:${ctx.packageName}")
+                Uri.parse("package:" + ctx.packageName)
             )
         )
         return true
@@ -147,10 +148,15 @@ fun App(store: GameStore) {
                         GameCard(
                             game = g,
                             onPlay = {
-                                if (!g.shortcutPath.isNullOrBlank()) {
-                                    message = launchWinlatorShortcut(ctx, g.shortcutPath)
-                                } else {
-                                    playing = g
+                                try {
+                                    runtime.prepare(g, store.gameDir(g))
+                                    if (!g.shortcutPath.isNullOrBlank()) {
+                                        message = launchWinlatorShortcut(ctx, g.shortcutPath)
+                                    } else {
+                                        playing = g
+                                    }
+                                } catch (e: Exception) {
+                                    message = e.message ?: "Profil runtime invalide."
                                 }
                             },
                             onShortcut = {
@@ -191,25 +197,30 @@ fun App(store: GameStore) {
     }
 
     playing?.let { g ->
-        val isoPath = store.isoFile(g)?.absolutePath ?: "ISO non conservé (réimporte ce jeu avec la nouvelle version)"
-        val installer = g.installer ?: "Autorun.exe / setup.exe"
+        val prepared = try { runtime.prepare(g, store.gameDir(g)) } catch (_: Exception) { null }
         AlertDialog(
             onDismissRequest = { playing = null },
             title = { Text(g.name) },
             text = {
-                Text(
-                    "Première configuration Winlator :\n\n" +
-                    "1. Monte l'image disque suivante dans le lecteur CD X:\n$isoPath\n\n" +
-                    "2. Lance X:\\$installer\n\n" +
-                    "3. Quand le jeu est installé, crée un raccourci Winlator vers son .exe. " +
-                    "Reviens ensuite ici et utilise « Associer raccourci » une seule fois."
-                )
+                if (prepared == null) {
+                    Text("Impossible de préparer le runtime de ce jeu.")
+                } else {
+                    Text(
+                        "Profil runtime reconnu : " + prepared.profile.id + "\n\n" +
+                        "Windows : " + prepared.container.windowsVersion + "\n" +
+                        "Architecture : " + prepared.container.architecture + "\n" +
+                        "CD : " + prepared.isoFile.absolutePath + "\n" +
+                        "Installation : " + prepared.installer.executable + "\n\n" +
+                        "Pour l'instant le moteur Wine/Box64 intégré n'est pas encore branché. " +
+                        "Cette configuration sera utilisée automatiquement par le backend Retro ISO."
+                    )
+                }
             },
             confirmButton = {
                 TextButton(onClick = {
                     message = launchWinlator(ctx)
                     playing = null
-                }) { Text("Ouvrir Winlator") }
+                }) { Text("Test Winlator") }
             },
             dismissButton = {
                 TextButton(onClick = { playing = null }) { Text("Fermer") }
