@@ -1,0 +1,9 @@
+{
+  "profiles": [
+    {
+      "id": "gangsters-2",
+      "asset": "profiles/gangsters-2.json",
+      "aliases": ["gangsters-2", "gangsters2", "gangster-2", "gangster2"]
+    }
+  ]
+}
