@@ -276,6 +276,17 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         FileUtils.delete(File(dosdevices, "x:"))
         FileUtils.symlink("../drive_x", File(dosdevices, "x:").absolutePath)
 
+        // Important pour les vieux jeux / InstallShield :
+        // x: expose le contenu lisible du CD, tandis que x:: représente le
+        // périphérique CD-ROM brut. Winlator 10.1+ utilise libcdio et sait
+        // traiter une image ISO/BIN/CUE comme source du lecteur virtuel X:.
+        // On pointe donc x:: directement vers l'ISO original conservé par
+        // Retro ISO au lieu de simuler uniquement un dossier CD.
+        val discImage = File(gameDir, profile.cdRom.image)
+        require(discImage.isFile) { "Image CD introuvable : " + discImage.absolutePath }
+        FileUtils.delete(File(dosdevices, "x::"))
+        FileUtils.symlink(discImage.absolutePath, File(dosdevices, "x::").absolutePath)
+
         val systemReg = File(wineDir, "system.reg")
         WineRegistryEditor(systemReg).use {
             it.setStringValue("Software\\Wine\\Drives", "x:", "cdrom")
