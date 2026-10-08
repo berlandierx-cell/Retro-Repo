@@ -107,6 +107,20 @@ s = s.replace(needle2, replacement2, 1)
 
 p.write_text(s)
 
+# Route Box64 through Android's executable system linker. Direct exec() of
+# app-packaged Box64 is denied on some recent Android builds even from nativeLibraryDir.
+gpl = Path(sys.argv[1]).parent / "xenvironment/components/GuestProgramLauncherComponent.java"
+gs = gpl.read_text()
+old_cmd = '''        String command = rootDir+"/usr/local/bin/box64 "+guestExecutable;
+'''
+new_cmd = '''        Context launchContext = environment.getContext();
+        String box64Path = launchContext.getApplicationInfo().nativeLibraryDir+"/libbox64.so";
+        String command = "/system/bin/linker64 \\"" + box64Path + "\\" " + guestExecutable;
+'''
+if old_cmd not in gs:
+    raise SystemExit("Retro ISO GuestProgramLauncher patch point not found")
+gpl.write_text(gs.replace(old_cmd, new_cmd, 1))
+
 # Expose native ProcessBuilder/exec failures instead of swallowing them.
 ph = Path(sys.argv[2])
 ps = ph.read_text()
