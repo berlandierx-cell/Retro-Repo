@@ -292,6 +292,17 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             it.setStringValue("Software\\Wine\\Drives", "x:", "cdrom")
         }
 
+        // Compatibility is profile-driven: old InstallShield packages may ship
+        // private Windows DLLs that must take precedence over Wine built-ins.
+        if (profile.dllOverrides.isNotEmpty()) {
+            val userReg = File(wineDir, "user.reg")
+            WineRegistryEditor(userReg).use { registry ->
+                profile.dllOverrides.forEach { (name, mode) ->
+                    registry.setStringValue("Software\\Wine\\DllOverrides", name, mode)
+                }
+            }
+        }
+
         val winVersions = WinVersions.getWinVersions()
         val index = winVersions.indexOfFirst { it.version == profile.windows }
         if (index >= 0) WineUtils.setWinVersion(container, index)
