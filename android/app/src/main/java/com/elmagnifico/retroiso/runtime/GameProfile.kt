@@ -10,12 +10,24 @@ data class GameProfile(
     val installer: String,
     val executable: String,
     val cdRom: CdRomConfig,
-    val patchVersion: String? = null
+    val patchVersion: String? = null,
+    val dllOverrides: Map<String, String> = emptyMap()
 ) {
     companion object {
         fun fromJson(json: String): GameProfile {
             val o = JSONObject(json)
             val cd = o.getJSONObject("cdrom")
+            val dllOverrides = linkedMapOf<String, String>()
+            val compat = o.optJSONObject("compatibility")
+            val overrides = compat?.optJSONObject("dllOverrides")
+            if (overrides != null) {
+                val keys = overrides.keys()
+                while (keys.hasNext()) {
+                    val key = keys.next()
+                    dllOverrides[key] = overrides.optString(key)
+                }
+            }
+
             return GameProfile(
                 id = o.getString("id"),
                 name = o.getString("name"),
@@ -28,7 +40,8 @@ data class GameProfile(
                     drive = cd.optString("drive", "X:"),
                     image = cd.optString("image", "disc.iso")
                 ),
-                patchVersion = o.optString("patch").takeIf { it.isNotBlank() }
+                patchVersion = o.optString("patch").takeIf { it.isNotBlank() },
+                dllOverrides = dllOverrides
             )
         }
     }
