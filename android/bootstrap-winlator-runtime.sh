@@ -14,4 +14,78 @@ git -C "$RUNTIME_DIR" remote add origin "$UPSTREAM"
 git -C "$RUNTIME_DIR" fetch -q --depth 1 origin "$PIN"
 git -C "$RUNTIME_DIR" checkout -q --detach FETCH_HEAD
 
-echo "Winlator sources prepared at $RUNTIME_DIR ($PIN)"
+python3 - "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text()
+
+# Imports for the Retro ISO watchdog dialog.
+if "import android.app.AlertDialog;" not in s:
+    s = s.replace("package com.winlator;\n", "package com.winlator;\n\nimport android.app.AlertDialog;\nimport android.os.Handler;\nimport android.os.Looper;\n")
+
+needle = '''        ProcessHelper.removeAllDebugCallbacks();
+        boolean enableLogs = preferences.getBoolean("enable_wine_debug", false) || preferences.getInt("box64_logs", 0) >= 1;
+'''
+replacement = '''        ProcessHelper.removeAllDebugCallbacks();
+
+        final StringBuilder retroIsoBootLog = new StringBuilder();
+        ProcessHelper.addDebugCallback((line) -> {
+            synchronized (retroIsoBootLog) {
+                retroIsoBootLog.append(line).append("\\n");
+                if (retroIsoBootLog.length() > 12000) {
+                    retroIsoBootLog.delete(0, retroIsoBootLog.length() - 12000);
+                }
+            }
+        });
+
+        boolean enableLogs = preferences.getBoolean("enable_wine_debug", false) || preferences.getInt("box64_logs", 0) >= 1;
+'''
+if needle not in s:
+    raise SystemExit("Retro ISO debug callback patch point not found")
+s = s.replace(needle, replacement, 1)
+
+needle2 = '''        setupUI();
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+'''
+replacement2 = '''        setupUI();
+
+        // Retro ISO watchdog: never leave the user on an endless "Starting up...".
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!flags[0] && !isFinishing()) {
+                preloaderDialog.closeOnUiThread();
+                String logText;
+                synchronized (retroIsoBootLog) {
+                    logText = retroIsoBootLog.toString().trim();
+                }
+                if (logText.isEmpty()) {
+                    logText = "Aucune sortie Wine/Box64 reçue. Le moteur n'a probablement pas lancé le processus invité.";
+                }
+                if (logText.length() > 5000) {
+                    logText = logText.substring(logText.length() - 5000);
+                }
+
+                new AlertDialog.Builder(this)
+                    .setTitle("Retro ISO - démarrage bloqué")
+                    .setMessage(
+                        "Aucune fenêtre Windows n'est apparue après 20 secondes.\\n\\n" +
+                        "Dernières lignes du moteur :\\n\\n" + logText
+                    )
+                    .setPositiveButton("Fermer", (dialog, which) -> finish())
+                    .setCancelable(false)
+                    .show();
+            }
+        }, 20000);
+
+        Executors.newSingleThreadExecutor().execute(() -> {
+'''
+if needle2 not in s:
+    raise SystemExit("Retro ISO watchdog patch point not found")
+s = s.replace(needle2, replacement2, 1)
+
+p.write_text(s)
+PY
+
+echo "Winlator sources prepared at $RUNTIME_DIR ($PIN) with Retro ISO diagnostics"
