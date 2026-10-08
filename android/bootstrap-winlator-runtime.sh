@@ -14,17 +14,28 @@ git -C "$RUNTIME_DIR" remote add origin "$UPSTREAM"
 git -C "$RUNTIME_DIR" fetch -q --depth 1 origin "$PIN"
 git -C "$RUNTIME_DIR" checkout -q --detach FETCH_HEAD
 
-# Build-time diagnosis of the Box64 ELF interpreter.
+# Winlator's Box64 binary is linked against an absolute loader path that
+# contains the original package name com.winlator. Rewrite it for Retro ISO,
+# otherwise execve() fails with EACCES when the kernel tries to open Winlator's
+# private rootfs loader.
 BOX64_ARCHIVE="$RUNTIME_DIR/app/src/main/assets/box64/box64-0.4.0.tzst"
-BOX64_DIAG="$RUNTIME_DIR/.box64-diag"
-rm -rf "$BOX64_DIAG"
-mkdir -p "$BOX64_DIAG"
-tar --zstd -xf "$BOX64_ARCHIVE" -C "$BOX64_DIAG"
-BOX64_BIN="$(find "$BOX64_DIAG" -type f -name box64 | head -n 1)"
+BOX64_PATCH="$RUNTIME_DIR/.box64-patch"
+rm -rf "$BOX64_PATCH"
+mkdir -p "$BOX64_PATCH"
+tar --zstd -xf "$BOX64_ARCHIVE" -C "$BOX64_PATCH"
+BOX64_BIN="$(find "$BOX64_PATCH" -type f -name box64 | head -n 1)"
+
+OLD_INTERP="$(patchelf --print-interpreter "$BOX64_BIN")"
+NEW_INTERP="/data/data/com.elmagnifico.retroiso/files/rootfs/lib/ld-linux-aarch64.so.1"
+
 echo "=== RETROISO BOX64 ELF ==="
-file "$BOX64_BIN" || true
-readelf -l "$BOX64_BIN" | grep -A2 -B2 -E 'INTERP|Requesting program interpreter' || true
+echo "Old interpreter: $OLD_INTERP"
+patchelf --set-interpreter "$NEW_INTERP" "$BOX64_BIN"
+echo "New interpreter: $(patchelf --print-interpreter "$BOX64_BIN")"
 echo "=========================="
+
+rm -f "$BOX64_ARCHIVE"
+tar --zstd -cf "$BOX64_ARCHIVE" -C "$BOX64_PATCH" .
 
 python3 - \
   "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" \
