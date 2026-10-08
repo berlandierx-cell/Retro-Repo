@@ -9,10 +9,8 @@ android {
 
     defaultConfig {
         applicationId = "com.elmagnifico.retroiso"
-        minSdk = 26
-        // targetSdk bas VOLONTAIRE (usage perso, hors Play Store) :
-        // permet plus tard d'exécuter les binaires Wine/Box64 depuis le stockage de l'appli.
-        targetSdk = 28
+        minSdk = 30
+        targetSdk = 34
         versionCode = 1
         versionName = "0.1"
     }
