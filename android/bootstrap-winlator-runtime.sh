@@ -14,6 +14,18 @@ git -C "$RUNTIME_DIR" remote add origin "$UPSTREAM"
 git -C "$RUNTIME_DIR" fetch -q --depth 1 origin "$PIN"
 git -C "$RUNTIME_DIR" checkout -q --detach FETCH_HEAD
 
+# Build-time diagnosis of the Box64 ELF interpreter.
+BOX64_ARCHIVE="$RUNTIME_DIR/app/src/main/assets/box64/box64-0.4.0.tzst"
+BOX64_DIAG="$RUNTIME_DIR/.box64-diag"
+rm -rf "$BOX64_DIAG"
+mkdir -p "$BOX64_DIAG"
+tar --zstd -xf "$BOX64_ARCHIVE" -C "$BOX64_DIAG"
+BOX64_BIN="$(find "$BOX64_DIAG" -type f -name box64 | head -n 1)"
+echo "=== RETROISO BOX64 ELF ==="
+file "$BOX64_BIN" || true
+readelf -l "$BOX64_BIN" | grep -A2 -B2 -E 'INTERP|Requesting program interpreter' || true
+echo "=========================="
+
 python3 - \
   "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" \
   "$RUNTIME_DIR/app/src/main/java/com/winlator/core/ProcessHelper.java" <<'PY'
