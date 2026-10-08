@@ -2,13 +2,13 @@ package com.elmagnifico.retroiso.runtime
 
 import android.content.Context
 import com.elmagnifico.retroiso.Game
+import org.json.JSONObject
 import java.io.File
 
 /**
  * Point d'entrée unique du futur moteur Retro ISO.
  *
- * Important : cette classe ne prétend pas encore embarquer Wine/Box64.
- * Elle transforme un jeu + son profil en configuration reproductible.
+ * Cette couche prépare une configuration reproductible.
  * Les backends Wine/Box64/libcdio seront branchés derrière cette API.
  */
 class RuntimeManager(private val context: Context) {
@@ -21,9 +21,35 @@ class RuntimeManager(private val context: Context) {
         val game: LaunchConfig
     )
 
-    fun loadProfile(id: String): GameProfile? {
+    private data class CatalogEntry(
+        val id: String,
+        val asset: String,
+        val aliases: Set<String>
+    )
+
+    private fun catalog(): List<CatalogEntry> {
         return try {
-            context.assets.open("profiles/$id.json").bufferedReader().use {
+            val json = context.assets.open("profiles/index.json").bufferedReader().use { it.readText() }
+            val arr = JSONObject(json).getJSONArray("profiles")
+            (0 until arr.length()).map { i ->
+                val o = arr.getJSONObject(i)
+                val aliases = o.getJSONArray("aliases")
+                CatalogEntry(
+                    id = o.getString("id"),
+                    asset = o.getString("asset"),
+                    aliases = (0 until aliases.length()).map { aliases.getString(it) }.toSet()
+                )
+            }
+        } catch (_: Exception) {
+            emptyList()
+        }
+    }
+
+    fun loadProfileForName(name: String): GameProfile? {
+        val key = slug(name)
+        val entry = catalog().firstOrNull { key == it.id || key in it.aliases } ?: return null
+        return try {
+            context.assets.open(entry.asset).bufferedReader().use {
                 GameProfile.fromJson(it.readText())
             }
         } catch (_: Exception) {
@@ -32,8 +58,7 @@ class RuntimeManager(private val context: Context) {
     }
 
     fun prepare(game: Game, gameDir: File): PreparedRuntime {
-        val profileId = slug(game.name)
-        val profile = loadProfile(profileId)
+        val profile = loadProfileForName(game.name)
             ?: throw IllegalStateException("Aucun profil runtime pour " + game.name)
 
         val iso = File(gameDir, profile.cdRom.image)
