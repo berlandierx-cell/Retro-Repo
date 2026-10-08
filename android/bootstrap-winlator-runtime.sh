@@ -14,6 +14,79 @@ git -C "$RUNTIME_DIR" remote add origin "$UPSTREAM"
 git -C "$RUNTIME_DIR" fetch -q --depth 1 origin "$PIN"
 git -C "$RUNTIME_DIR" checkout -q --detach FETCH_HEAD
 
+# Winlator embeds its original package name in native components and in the
+# prebuilt Linux rootfs. com.winlator and com.retroiso have the same byte
+# length, so this replacement is safe even inside ELF binaries.
+python3 - "$RUNTIME_DIR" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+old = b"com.winlator"
+new = b"com.retroiso"
+assert len(old) == len(new)
+
+targets = [
+    root / "app/src/main/cpp",
+    root / "app/src/main/assets/rootfs.tzst",
+]
+
+# Patch hard-coded native source paths before CMake compilation.
+for base in [root / "app/src/main/cpp"]:
+    for p in base.rglob("*"):
+        if not p.is_file():
+            continue
+        data = p.read_bytes()
+        if b"/data/data/com.winlator" in data:
+            p.write_bytes(data.replace(old, new))
+
+# Patch Java hard-coded storage path without touching Java package declarations.
+app_utils = root / "app/src/main/java/com/winlator/core/AppUtils.java"
+data = app_utils.read_bytes()
+app_utils.write_bytes(
+    data.replace(b"/data/data/com.winlator/storage", b"/data/data/com.retroiso/storage")
+)
+PY
+
+# Patch every embedded com.winlator occurrence inside the Linux rootfs itself.
+ROOTFS_ARCHIVE="$RUNTIME_DIR/app/src/main/assets/rootfs.tzst"
+ROOTFS_PATCH="$RUNTIME_DIR/.rootfs-package-patch"
+rm -rf "$ROOTFS_PATCH"
+mkdir -p "$ROOTFS_PATCH"
+tar --zstd -xf "$ROOTFS_ARCHIVE" -C "$ROOTFS_PATCH"
+
+python3 - "$ROOTFS_PATCH" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+old = b"com.winlator"
+new = b"com.retroiso"
+assert len(old) == len(new)
+
+patched = []
+for p in root.rglob("*"):
+    if not p.is_file() or p.is_symlink():
+        continue
+    try:
+        data = p.read_bytes()
+    except OSError:
+        continue
+    if old in data:
+        count = data.count(old)
+        p.write_bytes(data.replace(old, new))
+        patched.append((str(p.relative_to(root)), count))
+
+print("=== RETROISO ROOTFS PACKAGE PATCH ===")
+for name, count in patched:
+    print(f"{count}x {name}")
+print(f"Patched files: {len(patched)}")
+print("=====================================")
+PY
+
+rm -f "$ROOTFS_ARCHIVE"
+tar --zstd -cf "$ROOTFS_ARCHIVE" -C "$ROOTFS_PATCH" .
+
 # Patch the absolute ELF interpreter embedded in Winlator's Box64 binary.
 BOX64_ARCHIVE="$RUNTIME_DIR/app/src/main/assets/box64/box64-0.4.0.tzst"
 BOX64_PATCH="$RUNTIME_DIR/.box64-patch"
@@ -23,7 +96,7 @@ tar --zstd -xf "$BOX64_ARCHIVE" -C "$BOX64_PATCH"
 BOX64_BIN="$(find "$BOX64_PATCH" -type f -name box64 | head -n 1)"
 
 OLD_INTERP="$(patchelf --print-interpreter "$BOX64_BIN")"
-NEW_INTERP="/data/data/com.elmagnifico.retroiso/files/rootfs/lib/ld-linux-aarch64.so.1"
+NEW_INTERP="/data/data/com.retroiso/files/rootfs/lib/ld-linux-aarch64.so.1"
 
 echo "=== RETROISO BOX64 ELF ==="
 echo "Old interpreter: $OLD_INTERP"
