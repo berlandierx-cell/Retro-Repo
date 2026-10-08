@@ -32,7 +32,9 @@ fi
 cp "$BOX64_BIN" "$BOX64_JNI/libbox64.so"
 chmod 0755 "$BOX64_JNI/libbox64.so"
 
-python3 - "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" <<'PY'
+python3 - \
+  "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" \
+  "$RUNTIME_DIR/app/src/main/java/com/winlator/core/ProcessHelper.java" <<'PY'
 from pathlib import Path
 import sys
 
@@ -106,7 +108,7 @@ s = s.replace(needle2, replacement2, 1)
 p.write_text(s)
 
 # Expose native ProcessBuilder/exec failures instead of swallowing them.
-ph = Path("$RUNTIME_DIR/app/src/main/java/com/winlator/core/ProcessHelper.java")
+ph = Path(sys.argv[2])
 ps = ph.read_text()
 old = '''        catch (Exception e) {}
         return pid;
