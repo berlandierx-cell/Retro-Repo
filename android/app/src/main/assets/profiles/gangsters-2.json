@@ -10,5 +10,10 @@
   },
   "installer": "Autorun.exe",
   "executable": "Gangsters2.exe",
-  "patch": "1.0.7"
+  "patch": "1.0.7",
+  "compatibility": {
+    "dllOverrides": {
+      "security": "native,builtin"
+    }
+  }
 }
