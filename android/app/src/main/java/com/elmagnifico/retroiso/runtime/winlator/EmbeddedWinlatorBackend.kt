@@ -193,9 +193,12 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             "\nBox64: " + fileContext
 
         val probe = try {
-            ProcessBuilder(box64.absolutePath, "--version")
+            val pb = ProcessBuilder(box64.absolutePath, "--version")
                 .redirectErrorStream(true)
-                .start()
+            pb.environment()["LD_LIBRARY_PATH"] = rootFs.libDir.absolutePath
+            pb.environment()["HOME"] = root.absolutePath + RootFS.HOME_PATH
+            pb.environment()["TMPDIR"] = root.absolutePath + "/tmp"
+            pb.start()
         } catch (e: Exception) {
             throw IllegalStateException(
                 "Box64 bloqué par Android. " + securityInfo + "\n\n" +
