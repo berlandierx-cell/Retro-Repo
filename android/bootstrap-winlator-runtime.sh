@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 RUNTIME_DIR="$ROOT/.runtime/winlator"
 UPSTREAM="https://github.com/brunodev85/winlator-app.git"
-PIN="3981d86efa4f333b2a34a7da8b6521476cd8c8b9"
+PIN="c2f4ad4534f4637b543a9a3b085e28f50cf6d01c"
 
 rm -rf "$RUNTIME_DIR"
 mkdir -p "$(dirname "$RUNTIME_DIR")"
