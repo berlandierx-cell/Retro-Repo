@@ -49,6 +49,14 @@ fun App(store: GameStore) {
 
     val isoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
+            try {
+                ctx.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            } catch (_: Exception) {
+                // Some providers do not expose persistable permissions.
+            }
             progress = 0f
             try {
                 store.importIso(uri) { progress = it }
@@ -89,12 +97,18 @@ fun App(store: GameStore) {
         scope.launch {
             runtimeBusy = game.name
             try {
+                if (!store.hasLocalCache(game)) {
+                    progress = 0f
+                    store.ensureCached(game) { progress = it }
+                    progress = null
+                }
                 val plan = runtime.prepare(game, store.gameDir(game))
                 val prepared = embedded.prepare(game, store.gameDir(game), plan.profile)
                 embedded.launchInstaller(prepared)
             } catch (e: Exception) {
                 message = e.message ?: "Impossible de démarrer le moteur Retro ISO."
             } finally {
+                progress = null
                 runtimeBusy = null
             }
         }
@@ -132,6 +146,11 @@ fun App(store: GameStore) {
                                     patchFor = g
                                     patchPicker.launch(arrayOf("*/*"))
                                 }
+                            },
+                            onReleaseCache = {
+                                store.releaseCache(g)
+                                games = store.load()
+                                message = "Cache local libéré. L'ISO reste disponible depuis Drive."
                             },
                             onDelete = {
                                 store.delete(g)
@@ -187,6 +206,7 @@ fun GameCard(
     game: Game,
     onPlay: () -> Unit,
     onPatch: () -> Unit,
+    onReleaseCache: () -> Unit,
     onDelete: () -> Unit
 ) {
     Card(Modifier.fillMaxWidth()) {
@@ -196,10 +216,16 @@ fun GameCard(
         ) {
             Text(game.name, style = MaterialTheme.typography.titleMedium, minLines = 2, maxLines = 2)
             if (!game.iso.isNullOrBlank()) {
-                Text("ISO prêt • moteur intégré", style = MaterialTheme.typography.bodySmall)
+                val source = if (!game.sourceUri.isNullOrBlank()) "Drive" else "local"
+                Text("Bibliothèque : $source • moteur intégré", style = MaterialTheme.typography.bodySmall)
             }
             Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) { Text("Jouer") }
             OutlinedButton(onClick = onPatch, modifier = Modifier.fillMaxWidth()) { Text("Ajouter un patch") }
+            if (!game.sourceUri.isNullOrBlank()) {
+                TextButton(onClick = onReleaseCache, modifier = Modifier.fillMaxWidth()) {
+                    Text("Libérer le cache local")
+                }
+            }
             TextButton(onClick = onDelete, modifier = Modifier.fillMaxWidth()) { Text("Supprimer") }
         }
     }
