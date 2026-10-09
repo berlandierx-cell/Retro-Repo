@@ -74,7 +74,7 @@ fun App(store: GameStore) {
         if (uris.isNotEmpty() && g != null) scope.launch {
             try {
                 uris.forEach { store.copyPatch(g, it) }
-                message = uris.size.toString() + " fichier(s) de compatibilité ajouté(s)."
+                message = uris.size.toString() + " correctif(s) ajouté(s). Les packs .7z sont extraits automatiquement."
             } catch (e: Exception) {
                 message = "Erreur : " + e.message
             }
