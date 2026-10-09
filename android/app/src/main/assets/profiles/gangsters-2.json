@@ -15,5 +15,6 @@
     "dllOverrides": {
       "security": "native,builtin"
     }
-  }
+  },
+  "language": "fr"
 }
