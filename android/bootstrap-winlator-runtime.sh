@@ -163,18 +163,42 @@ replacement2 = '''        setupUI();
         // the guest process to terminate.
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!isFinishing()) {
-                String logText;
+                String rawLog;
                 synchronized (retroIsoBootLog) {
-                    logText = retroIsoBootLog.toString().trim();
+                    rawLog = retroIsoBootLog.toString();
                 }
-                if (logText.isEmpty()) logText = "Aucune sortie Wine/Box64 capturée.";
-                if (logText.length() > 9000) {
-                    logText = logText.substring(logText.length() - 9000);
+
+                StringBuilder useful = new StringBuilder();
+                for (String line : rawLog.split("\\n")) {
+                    String low = line.toLowerCase(java.util.Locale.ROOT);
+                    if (low.contains("err:") ||
+                        low.contains("fixme:") ||
+                        low.contains("warn:") ||
+                        low.contains("queryinterface") ||
+                        low.contains("cocreate") ||
+                        low.contains("coinitialize") ||
+                        low.contains("classfactory") ||
+                        low.contains("hresult") ||
+                        low.contains("80004002") ||
+                        low.contains("nointerface") ||
+                        low.contains("interface") ||
+                        low.contains("exception") ||
+                        low.contains("seh:")) {
+                        useful.append(line).append("\\n");
+                    }
+                }
+
+                String logText = useful.toString().trim();
+                if (logText.isEmpty()) {
+                    logText = "Aucune ligne COM/erreur ciblée trouvée.\\n\\nDernières lignes brutes :\\n" + rawLog.trim();
+                }
+                if (logText.length() > 10000) {
+                    logText = logText.substring(logText.length() - 10000);
                 }
 
                 new AlertDialog.Builder(this)
                     .setTitle("Retro ISO - diagnostic InstallShield")
-                    .setMessage("Snapshot des logs Wine/COM :\\n\\n" + logText)
+                    .setMessage("Logs COM/erreurs ciblés :\\n\\n" + logText)
                     .setPositiveButton("Continuer", null)
                     .setCancelable(true)
                     .show();
