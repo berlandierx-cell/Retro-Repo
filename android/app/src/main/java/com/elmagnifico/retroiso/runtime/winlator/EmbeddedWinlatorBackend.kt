@@ -152,8 +152,20 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val driveC = File(container.rootDir, ".wine/drive_c")
         if (!driveC.isDirectory) return null
 
+        val known = listOf(
+            File(driveC, "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/" + executableName),
+            File(driveC, "Program Files/Eidos Interactive/Hothouse Creations/Gangsters 2/" + executableName),
+            File(driveC, "Program Files (x86)/Hothouse Creations/Gangsters 2/" + executableName),
+            File(driveC, "Program Files/Hothouse Creations/Gangsters 2/" + executableName)
+        )
+        known.firstOrNull { it.isFile }?.let { return it }
+
         return driveC.walkTopDown()
-            .maxDepth(8)
+            .onEnter { dir ->
+                !dir.name.equals("windows", ignoreCase = true) &&
+                !dir.name.equals("system32", ignoreCase = true) &&
+                !dir.name.equals("syswow64", ignoreCase = true)
+            }
             .firstOrNull {
                 it.isFile && it.name.equals(executableName, ignoreCase = true)
             }
