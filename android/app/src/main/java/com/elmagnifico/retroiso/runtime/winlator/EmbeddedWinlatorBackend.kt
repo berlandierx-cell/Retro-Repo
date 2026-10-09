@@ -295,6 +295,31 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             }
     }
 
+    fun describeInstalledGameFiles(prepared: PreparedContainer): String {
+        val exe = prepared.gameExecutable
+            ?: return "Gangsters2.exe introuvable : impossible d'identifier le dossier d'installation."
+
+        val root = exe.parentFile
+        val lines = mutableListOf<String>()
+        lines += "Dossier : " + root.absolutePath
+        lines += ""
+        root.walkTopDown()
+            .maxDepth(2)
+            .sortedBy { it.absolutePath.lowercase() }
+            .forEach { entry ->
+                if (entry == root) return@forEach
+                val rel = entry.relativeTo(root).invariantSeparatorsPath
+                if (entry.isDirectory) {
+                    lines += "[DIR] " + rel
+                } else {
+                    val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.ROOT)
+                        .format(java.util.Date(entry.lastModified()))
+                    lines += "[FILE] " + rel + " | " + entry.length() + " octets | " + stamp
+                }
+            }
+        return lines.joinToString("\n")
+    }
+
     /**
      * Test diagnostic : lance directement Setup.exe depuis le CD extrait.
      */
