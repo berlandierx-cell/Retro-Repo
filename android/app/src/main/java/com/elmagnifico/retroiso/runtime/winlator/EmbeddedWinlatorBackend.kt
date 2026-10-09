@@ -148,8 +148,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val systemReg = File(prepared.rootDir, ".wine/system.reg")
         WineRegistryEditor(systemReg).use { registry ->
             registry.setStringValue("Software\\Gangsters2g", "PATH", windowsInstallDir)
-            // VERSION is the updater's own success marker. Never fabricate it.
-            registry.removeValue("Software\\Gangsters2g", "VERSION")
+            // Preserve VERSION if the official updater already wrote it.
         }
 
         val stateDir = patchStateDir(prepared)
@@ -174,6 +173,20 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val stateDir = patchStateDir(prepared)
         val appliedMarker = File(stateDir, "patch107.applied")
         if (appliedMarker.isFile) return true
+
+        // The Hothouse updater writes its release notes / patch language data
+        // only after a successful update. This also lets an already-patched
+        // installation created by an older Retro ISO build be recognized.
+        val gameDir = exe.parentFile
+        val updaterArtifacts = listOf(
+            File(gameDir, "Update.txt"),
+            File(gameDir, "language/patch1.lan"),
+            File(gameDir, "Language/patch1.lan")
+        )
+        if (updaterArtifacts.any { it.isFile }) {
+            appliedMarker.writeText("updater-artifact")
+            return true
+        }
 
         // Most robust signal: the official updater modifies Gangsters2.exe.
         // Compare it with the executable hash captured immediately before
