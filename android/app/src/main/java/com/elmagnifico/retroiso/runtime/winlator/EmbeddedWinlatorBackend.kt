@@ -79,6 +79,12 @@ class EmbeddedWinlatorBackend(private val context: Context) {
      * Wine voit immédiatement le média au démarrage de l'installeur.
      */
     fun launchInstaller(prepared: PreparedContainer) {
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("enable_wine_debug", true)
+            .putString("wine_debug_channels", "err,ole,loaddll,module")
+            .putInt("box64_logs", 1)
+            .apply()
+
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", prepared.installerFile.absolutePath)
