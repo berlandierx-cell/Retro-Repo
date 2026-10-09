@@ -143,6 +143,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", patch.absolutePath)
+            putExtra("retroiso_auto_exit", true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
