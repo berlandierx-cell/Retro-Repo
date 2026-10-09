@@ -180,6 +180,13 @@ replacement2 = '''        setupUI();
                         low.contains("err:seh:") ||
                         low.contains("err:module:") ||
                         low.contains("err:loaddll:") ||
+                        low.contains("wininet:") ||
+                        low.contains("ws2_32:") ||
+                        low.contains("internetgetconnectedstate") ||
+                        low.contains("internetconnect") ||
+                        low.contains("ftp") ||
+                        low.contains("http") ||
+                        low.contains("getaddrinfo") ||
                         low.contains("queryinterface") ||
                         low.contains("cocreate") ||
                         low.contains("classfactory") ||
@@ -274,7 +281,7 @@ wine_debug_old = '''        boolean enableWineDebug = preferences.getBoolean("en
 '''
 wine_debug_new = '''        boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
         if (enableWineDebug) {
-            envVars.put("WINEDEBUG", "err+ole,fixme+ole,warn+ole,err+rpc,fixme+rpc,err+seh,err+module,err+loaddll");
+            envVars.put("WINEDEBUG", "err+ole,fixme+ole,warn+ole,err+rpc,fixme+rpc,err+seh,err+module,err+loaddll,trace+wininet,warn+wininet,err+wininet,trace+ws2_32,warn+ws2_32,err+ws2_32");
         }
         else {
             envVars.put("WINEDEBUG", "-all");
