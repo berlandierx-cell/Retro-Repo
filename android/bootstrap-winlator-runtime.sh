@@ -171,19 +171,21 @@ replacement2 = '''        setupUI();
                 StringBuilder useful = new StringBuilder();
                 for (String line : rawLog.split("\\n")) {
                     String low = line.toLowerCase(java.util.Locale.ROOT);
-                    if (low.contains("err:") ||
-                        low.contains("fixme:") ||
-                        low.contains("warn:") ||
+                    boolean interesting =
+                        low.contains("err:ole:") ||
+                        low.contains("fixme:ole:") ||
+                        low.contains("warn:ole:") ||
+                        low.contains("err:rpc:") ||
+                        low.contains("fixme:rpc:") ||
+                        low.contains("err:seh:") ||
+                        low.contains("err:module:") ||
+                        low.contains("err:loaddll:") ||
                         low.contains("queryinterface") ||
                         low.contains("cocreate") ||
-                        low.contains("coinitialize") ||
                         low.contains("classfactory") ||
-                        low.contains("hresult") ||
                         low.contains("80004002") ||
-                        low.contains("nointerface") ||
-                        low.contains("interface") ||
-                        low.contains("exception") ||
-                        low.contains("seh:")) {
+                        low.contains("nointerface");
+                    if (interesting && !low.contains("trace:")) {
                         useful.append(line).append("\\n");
                     }
                 }
@@ -265,6 +267,22 @@ term_new = '''        guestProgramLauncherComponent.setTerminationCallback((stat
 if term_old not in s:
     raise SystemExit("Retro ISO termination callback patch point not found")
 s = s.replace(term_old, term_new, 1)
+
+wine_debug_old = '''        boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
+        String wineDebugChannels = preferences.getString("wine_debug_channels", SettingsFragment.DEFAULT_WINE_DEBUG_CHANNELS);
+        envVars.put("WINEDEBUG", enableWineDebug && !wineDebugChannels.isEmpty() ? "+"+wineDebugChannels.replace(",", ",+") : "-all");
+'''
+wine_debug_new = '''        boolean enableWineDebug = preferences.getBoolean("enable_wine_debug", false);
+        if (enableWineDebug) {
+            envVars.put("WINEDEBUG", "err+ole,fixme+ole,warn+ole,err+rpc,fixme+rpc,err+seh,err+module,err+loaddll");
+        }
+        else {
+            envVars.put("WINEDEBUG", "-all");
+        }
+'''
+if wine_debug_old not in s:
+    raise SystemExit("Retro ISO WINEDEBUG patch point not found")
+s = s.replace(wine_debug_old, wine_debug_new, 1)
 
 p.write_text(s)
 
