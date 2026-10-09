@@ -15,5 +15,6 @@
     "dllOverrides": {
       "security": "native,builtin"
     }
-  }
+  },
+  "installedExecutablePath": "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/Gangsters2.exe"
 }
