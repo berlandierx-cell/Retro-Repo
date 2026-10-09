@@ -163,7 +163,7 @@ replacement2 = '''        setupUI();
         // window is mapped, dump recent Wine/COM logs instead of waiting for
         // the guest process to terminate.
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!isFinishing()) {
+            if (preferences.getBoolean("enable_wine_debug", false) && !isFinishing()) {
                 String rawLog;
                 synchronized (retroIsoBootLog) {
                     rawLog = retroIsoBootLog.toString();
@@ -216,7 +216,7 @@ replacement2 = '''        setupUI();
         }, 15000);
 
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            if (!flags[0] && !isFinishing()) {
+            if (preferences.getBoolean("enable_wine_debug", false) && !flags[0] && !isFinishing()) {
                 preloaderDialog.closeOnUiThread();
                 String logText;
                 synchronized (retroIsoBootLog) {
@@ -252,6 +252,16 @@ s = s.replace(needle2, replacement2, 1)
 term_old = '''        guestProgramLauncherComponent.setTerminationCallback((status) -> exit());
 '''
 term_new = '''        guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
+            if (getIntent().getBooleanExtra("retroiso_auto_exit", false)) {
+                exit();
+                return;
+            }
+
+            if (!preferences.getBoolean("enable_wine_debug", false)) {
+                exit();
+                return;
+            }
+
             String logText;
             synchronized (retroIsoBootLog) {
                 logText = retroIsoBootLog.toString().trim();
