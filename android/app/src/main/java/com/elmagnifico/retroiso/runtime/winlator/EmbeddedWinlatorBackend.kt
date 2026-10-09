@@ -81,7 +81,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     fun launchInstaller(prepared: PreparedContainer) {
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", true)
-            .putString("wine_debug_channels", "err,ole,loaddll,module")
+            .putString("wine_debug_channels", "ole,seh,loaddll")
             .putInt("box64_logs", 1)
             .apply()
 
