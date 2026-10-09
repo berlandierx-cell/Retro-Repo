@@ -104,7 +104,11 @@ fun App(store: GameStore) {
                 }
                 val plan = runtime.prepare(game, store.gameDir(game))
                 val prepared = embedded.prepare(game, store.gameDir(game), plan.profile)
-                embedded.launchInstaller(prepared)
+                if (prepared.gameExecutable != null) {
+                    embedded.launchGame(prepared)
+                } else {
+                    embedded.launchInstaller(prepared)
+                }
             } catch (e: Exception) {
                 message = e.message ?: "Impossible de démarrer le moteur Retro ISO."
             } finally {
