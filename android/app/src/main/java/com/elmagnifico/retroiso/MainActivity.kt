@@ -170,7 +170,7 @@ fun App(store: GameStore) {
                                     try {
                                         val plan = runtime.prepare(g, store.gameDir(g))
                                         val prepared = embedded.prepare(g, store.gameDir(g), plan.profile)
-                                        message = embedded.describeInstalledGameFiles(prepared)
+                                        message = embedded.describeInstalledExecutables(prepared)
                                     } catch (e: Exception) {
                                         message = "Erreur inventaire : " + e.message
                                     }
@@ -261,7 +261,7 @@ fun GameCard(
             Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) { Text("Jouer") }
             OutlinedButton(onClick = onPatch, modifier = Modifier.fillMaxWidth()) { Text("Ajouter un patch") }
             TextButton(onClick = onInspectFiles, modifier = Modifier.fillMaxWidth()) {
-                Text("Voir les fichiers installés")
+                Text("Voir EXE / DLL")
             }
             if (!game.sourceUri.isNullOrBlank()) {
                 TextButton(onClick = onReleaseCache, modifier = Modifier.fillMaxWidth()) {
