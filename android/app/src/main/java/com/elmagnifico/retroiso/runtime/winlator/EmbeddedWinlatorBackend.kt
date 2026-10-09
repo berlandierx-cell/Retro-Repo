@@ -125,7 +125,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         // misleading "Impossible de trouver Internet" updater error.
         val driveC = File(prepared.rootDir, ".wine/drive_c")
         val relativeGameDir = gameExe.parentFile.relativeTo(driveC).invariantSeparatorsPath
-        val windowsInstallDir = "C:\\" + relativeGameDir.replace("/", "\\")
+        val windowsInstallDir = ("C:\\" + relativeGameDir.replace("/", "\\")).let {
+            if (it.endsWith("\\")) it else it + "\\"
+        }
         val systemReg = File(prepared.rootDir, ".wine/system.reg")
         WineRegistryEditor(systemReg).use { registry ->
             registry.setStringValue("Software\\Gangsters2g", "PATH", windowsInstallDir)
@@ -134,7 +136,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         }
 
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
-            .putBoolean("enable_wine_debug", true)
+            .putBoolean("enable_wine_debug", false)
             .putInt("box64_logs", 0)
             .apply()
 
