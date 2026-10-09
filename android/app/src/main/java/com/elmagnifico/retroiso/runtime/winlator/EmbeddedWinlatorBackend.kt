@@ -118,6 +118,22 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     fun launchPatch(prepared: PreparedContainer) {
         val patch = prepared.patchExecutable
             ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le dossier Patch.")
+        val gameExe = prepared.gameExecutable
+            ?: throw IllegalStateException("Gangsters2.exe introuvable avant application du patch.")
+
+        // The original Hothouse updater does not discover the install path by
+        // scanning Program Files. Its own code reads:
+        // HKLM\\Software\\Gangsters2g -> PATH / VERSION.
+        // Old InstallShield/Wine setups may omit that legacy key, producing the
+        // misleading "Impossible de trouver Internet" updater error.
+        val driveC = File(prepared.rootDir, ".wine/drive_c")
+        val relativeGameDir = gameExe.parentFile.relativeTo(driveC).invariantSeparatorsPath
+        val windowsInstallDir = "C:\\" + relativeGameDir.replace("/", "\\")
+        val systemReg = File(prepared.rootDir, ".wine/system.reg")
+        WineRegistryEditor(systemReg).use { registry ->
+            registry.setStringValue("Software\\Gangsters2g", "PATH", windowsInstallDir)
+            registry.setDwordValue("Software\\Gangsters2g", "VERSION", 100)
+        }
 
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", true)
