@@ -7,6 +7,7 @@ import com.elmagnifico.retroiso.runtime.GameProfile
 import com.winlator.XServerDisplayActivity
 import com.winlator.container.Container
 import com.winlator.container.ContainerManager
+import com.winlator.container.DXWrappers
 import com.winlator.core.DefaultVersion
 import com.winlator.core.FileUtils
 import com.winlator.core.GeneralComponents
@@ -241,8 +242,12 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     private fun installCompatibilityDlls(prepared: PreparedContainer) {
         val exe = prepared.gameExecutable ?: return
         prepared.compatibilityDlls.forEach { dll ->
+            if (dll.name.equals("DDraw.dll", ignoreCase = true)) return@forEach
             dll.copyTo(File(exe.parentFile, dll.name), overwrite = true)
         }
+        // Remove any previously copied pack DDraw.dll so Winlator's CNC DDraw
+        // wrapper can take precedence for this classic DirectDraw title.
+        File(exe.parentFile, "DDraw.dll").delete()
     }
 
     /**
@@ -516,6 +521,11 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val winVersions = WinVersions.getWinVersions()
         val index = winVersions.indexOfFirst { it.version == profile.windows }
         if (index >= 0) WineUtils.setWinVersion(container, index)
+
+        if (profile.id == "gangsters-2") {
+            container.setDXWrapper(DXWrappers.DXVK)
+            container.setDXWrapperConfig("ddrawWrapper=" + DXWrappers.CNC_DDRAW)
+        }
 
         container.saveData()
     }
