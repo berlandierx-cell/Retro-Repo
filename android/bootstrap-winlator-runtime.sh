@@ -109,7 +109,8 @@ tar --zstd -cf "$BOX64_ARCHIVE" -C "$BOX64_PATCH" .
 
 python3 - \
   "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" \
-  "$RUNTIME_DIR/app/src/main/java/com/winlator/core/ProcessHelper.java" <<'PY'
+  "$RUNTIME_DIR/app/src/main/java/com/winlator/core/ProcessHelper.java" \
+  "$RUNTIME_DIR/app/src/main/java/com/winlator/core/NetworkHelper.java" <<'PY'
 from pathlib import Path
 import sys
 
@@ -292,6 +293,38 @@ if wine_debug_old not in s:
 s = s.replace(wine_debug_old, wine_debug_new, 1)
 
 p.write_text(s)
+
+# Winlator 11.2 only formats a few IPv4 prefix lengths (/8,/16,/24,/32).
+# Mobile networks commonly expose /30,/29,/28... which produced an empty
+# netmask in tmp/ifaddrs and can make legacy WinInet report "offline".
+nh = Path(sys.argv[3])
+ns = nh.read_text()
+old_mask = '''    public static String formatNetmask(int prefixLength) {
+        switch (prefixLength) {
+            case 8: return "255.0.0.0";
+            case 16: return "255.255.0.0";
+            case 24: return "255.255.255.0";
+            case 32: return "255.255.255.255";
+            case 64: return "ffff:ffff:ffff:ffff::";
+            default: return "";
+        }
+    }
+'''
+new_mask = '''    public static String formatNetmask(int prefixLength) {
+        if (prefixLength >= 0 && prefixLength <= 32) {
+            long mask = prefixLength == 0 ? 0L : (0xffffffffL << (32 - prefixLength)) & 0xffffffffL;
+            return ((mask >>> 24) & 255) + "." +
+                   ((mask >>> 16) & 255) + "." +
+                   ((mask >>> 8) & 255) + "." +
+                   (mask & 255);
+        }
+        if (prefixLength == 64) return "ffff:ffff:ffff:ffff::";
+        return "";
+    }
+'''
+if old_mask not in ns:
+    raise SystemExit("Retro ISO NetworkHelper netmask patch point not found")
+nh.write_text(ns.replace(old_mask, new_mask, 1))
 
 ph = Path(sys.argv[2])
 ps = ph.read_text()
