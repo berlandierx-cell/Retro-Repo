@@ -24,7 +24,8 @@ data class Game(
     val dir: String,
     val iso: String? = null,
     val installer: String? = null,
-    val shortcutPath: String? = null
+    val shortcutPath: String? = null,
+    val sourceUri: String? = null
 )
 
 class GameStore(private val ctx: Context) {
@@ -49,7 +50,8 @@ class GameStore(private val ctx: Context) {
                 dir = o.getString("dir"),
                 iso = o.optString("iso").takeIf { it.isNotBlank() },
                 installer = o.optString("installer").takeIf { it.isNotBlank() },
-                shortcutPath = o.optString("shortcutPath").takeIf { it.isNotBlank() }
+                shortcutPath = o.optString("shortcutPath").takeIf { it.isNotBlank() },
+                sourceUri = o.optString("sourceUri").takeIf { it.isNotBlank() }
             )
         }
     }
@@ -65,6 +67,7 @@ class GameStore(private val ctx: Context) {
                     .put("iso", g.iso ?: "")
                     .put("installer", g.installer ?: "")
                     .put("shortcutPath", g.shortcutPath ?: "")
+                    .put("sourceUri", g.sourceUri ?: "")
             )
         }
         index.parentFile?.mkdirs()
@@ -127,6 +130,74 @@ class GameStore(private val ctx: Context) {
         return allExe.firstOrNull()?.relativeTo(dest)?.invariantSeparatorsPath
     }
 
+    fun hasLocalCache(game: Game): Boolean {
+        val base = gameDir(game)
+        val iso = game.iso?.let { File(base, it) }
+        val cd = File(base, "CD")
+        return iso?.isFile == true && cd.isDirectory
+    }
+
+    /**
+     * Supprime uniquement les médias/cache recréables. La fiche du jeu et
+     * l'URI Drive persistante sont conservées.
+     */
+    fun releaseCache(game: Game) {
+        game.iso?.let { File(gameDir(game), it).delete() }
+        File(gameDir(game), "CD").deleteRecursively()
+    }
+
+    /**
+     * Restaure automatiquement le cache local depuis la source Drive/content://
+     * mémorisée lors de l'import.
+     */
+    suspend fun ensureCached(game: Game, onProgress: (Float) -> Unit = {}) = withContext(Dispatchers.IO) {
+        if (hasLocalCache(game)) return@withContext
+
+        val source = game.sourceUri?.let(Uri::parse)
+            ?: throw IllegalStateException("Source Drive indisponible pour " + game.name)
+
+        val base = gameDir(game).apply { mkdirs() }
+        val isoFile = File(base, game.iso ?: "disc.iso")
+        val cd = File(base, "CD").apply { deleteRecursively(); mkdirs() }
+
+        try {
+            ctx.contentResolver.openInputStream(source)?.use { input ->
+                isoFile.outputStream().buffered().use { output -> input.copyTo(output) }
+            } ?: throw IllegalStateException("Impossible d'ouvrir la source Drive.")
+
+            FileInputStream(isoFile).channel.use { ch ->
+                val iso = IsoReader(ch).apply { open() }
+                val entries = iso.list()
+                val total = entries.filter { !it.isDir }.sumOf { it.size }.coerceAtLeast(1)
+                var done = 0L
+                var lastPct = -1
+                for (e in entries) {
+                    val target = File(cd, e.path)
+                    if (!target.canonicalPath.startsWith(cd.canonicalPath)) continue
+                    if (e.isDir) {
+                        target.mkdirs()
+                        continue
+                    }
+                    target.parentFile?.mkdirs()
+                    target.outputStream().buffered().use { out ->
+                        iso.copyTo(e, out) { n ->
+                            done += n
+                            val pct = (done * 100 / total).toInt()
+                            if (pct != lastPct) {
+                                lastPct = pct
+                                onProgress(done.toFloat() / total)
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            isoFile.delete()
+            cd.deleteRecursively()
+            throw t
+        }
+    }
+
     /**
      * Conserve l'ISO original dans Téléchargements/RetroIso/<jeu>/disc.iso,
      * puis l'extrait dans <jeu>/CD pour inspection et installation.
@@ -139,7 +210,8 @@ class GameStore(private val ctx: Context) {
             id = UUID.randomUUID().toString(),
             name = name,
             dir = uniqueDir(name),
-            iso = "disc.iso"
+            iso = "disc.iso",
+            sourceUri = uri.toString()
         )
         val base = gameDir(provisional).apply { mkdirs() }
         val isoFile = File(base, "disc.iso")
