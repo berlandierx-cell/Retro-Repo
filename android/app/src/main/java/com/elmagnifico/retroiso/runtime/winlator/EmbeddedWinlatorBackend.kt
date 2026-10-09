@@ -44,7 +44,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val cdDir: File,
         val installerFile: File,
         val installerDosPath: String,
-        val gameExecutable: File?
+        val gameExecutable: File?,
+        val patchExecutable: File?,
+        val compatibilityDlls: List<File>
     )
 
     suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
@@ -65,6 +67,20 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         configureContainer(container, gameDir, cdDir, profile)
 
         val gameExecutable = findInstalledExecutable(container, profile.executable)
+        val patchDir = File(gameDir, "Patch")
+        val patchExecutable = patchDir.listFiles()
+            ?.firstOrNull { it.isFile && it.extension.equals("exe", true) &&
+                (it.name.contains("107", true) || it.name.contains("patch", true)) }
+        val compatibilityDlls = patchDir.listFiles()
+            ?.filter { it.isFile && it.extension.equals("dll", true) }
+            ?: emptyList()
+
+        // Once the game is installed, place compatibility DLLs next to the EXE.
+        if (gameExecutable != null && compatibilityDlls.isNotEmpty()) {
+            compatibilityDlls.forEach { dll ->
+                dll.copyTo(File(gameExecutable.parentFile, dll.name), overwrite = true)
+            }
+        }
 
         return PreparedContainer(
             containerId = container.id,
@@ -73,7 +89,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             cdDir = cdDir,
             installerFile = installerFile,
             installerDosPath = profile.cdRom.drive + "\\" + profile.installer,
-            gameExecutable = gameExecutable
+            gameExecutable = gameExecutable,
+            patchExecutable = patchExecutable,
+            compatibilityDlls = compatibilityDlls
         )
     }
 
@@ -92,6 +110,18 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", prepared.installerFile.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    fun launchPatch(prepared: PreparedContainer) {
+        val patch = prepared.patchExecutable
+            ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le dossier Patch.")
+
+        val intent = Intent(context, XServerDisplayActivity::class.java).apply {
+            putExtra("container_id", prepared.containerId)
+            putExtra("exec_path", patch.absolutePath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
