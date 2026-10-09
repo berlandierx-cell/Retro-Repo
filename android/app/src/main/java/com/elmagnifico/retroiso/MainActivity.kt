@@ -163,6 +163,17 @@ fun App(store: GameStore) {
                                     patchPicker.launch(arrayOf("*/*"))
                                 }
                             },
+                            onInspectFiles = {
+                                scope.launch {
+                                    try {
+                                        val plan = runtime.prepare(g, store.gameDir(g))
+                                        val prepared = embedded.prepare(g, store.gameDir(g), plan.profile)
+                                        message = embedded.describeInstalledGameFiles(prepared)
+                                    } catch (e: Exception) {
+                                        message = "Erreur inventaire : " + e.message
+                                    }
+                                }
+                            },
                             onReleaseCache = {
                                 store.releaseCache(g)
                                 games = store.load()
@@ -222,6 +233,7 @@ fun GameCard(
     game: Game,
     onPlay: () -> Unit,
     onPatch: () -> Unit,
+    onInspectFiles: () -> Unit,
     onReleaseCache: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -237,6 +249,9 @@ fun GameCard(
             }
             Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) { Text("Jouer") }
             OutlinedButton(onClick = onPatch, modifier = Modifier.fillMaxWidth()) { Text("Ajouter un patch") }
+            TextButton(onClick = onInspectFiles, modifier = Modifier.fillMaxWidth()) {
+                Text("Voir les fichiers installés")
+            }
             if (!game.sourceUri.isNullOrBlank()) {
                 TextButton(onClick = onReleaseCache, modifier = Modifier.fillMaxWidth()) {
                     Text("Libérer le cache local")
