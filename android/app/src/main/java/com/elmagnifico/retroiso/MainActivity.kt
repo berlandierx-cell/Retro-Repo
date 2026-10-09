@@ -116,6 +116,11 @@ fun App(store: GameStore) {
                     }
                 } else if (prepared.gameExecutable != null) {
                     embedded.launchGame(prepared)
+                } else if (prepared.patchExecutable != null || prepared.compatibilityDlls.isNotEmpty()) {
+                    throw IllegalStateException(
+                        "Le jeu semble déjà installé mais Gangsters2.exe est introuvable. " +
+                        "Retro ISO refuse de relancer Setup.exe pour éviter une réinstallation en boucle."
+                    )
                 } else {
                     embedded.launchInstaller(prepared)
                 }
