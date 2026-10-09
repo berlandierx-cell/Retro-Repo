@@ -151,9 +151,40 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
     fun isPatchApplied(prepared: PreparedContainer): Boolean {
         val systemReg = File(prepared.rootDir, ".wine/system.reg")
-        return WineRegistryEditor(systemReg).use { registry ->
-            registry.getDwordValue("Software\\Gangsters2g", "VERSION") != null
+        if (!systemReg.isFile) return false
+
+        // Hothouse Updater is a 32-bit program. Under Wine WoW64 its HKLM
+        // writes can be redirected to Wow6432Node. Older updater builds also
+        // differ on whether VERSION is REG_DWORD or REG_SZ, so don't assume
+        // one exact representation.
+        val candidateKeys = listOf(
+            "Software\\Gangsters2g",
+            "Software\\Wow6432Node\\Gangsters2g",
+            "Software\\WOW6432Node\\Gangsters2g"
+        )
+
+        WineRegistryEditor(systemReg).use { registry ->
+            for (key in candidateKeys) {
+                try {
+                    if (registry.getDwordValue(key, "VERSION") != null) return true
+                } catch (_: Exception) {
+                    // VERSION may be a string in some updater builds.
+                }
+                try {
+                    val value = registry.getStringValue(key, "VERSION")
+                    if (!value.isNullOrBlank()) return true
+                } catch (_: Exception) {}
+            }
         }
+
+        // Final compatibility fallback: inspect the registry text directly so
+        // an uncommon Wine redirection/casing cannot make Retro ISO relaunch
+        // an already-successful patch forever.
+        val text = systemReg.readText()
+        val lower = text.lowercase()
+        val keyPresent = lower.contains("gangsters2g")
+        val versionPresent = Regex("""(?im)^"version"=""").containsMatchIn(text)
+        return keyPresent && versionPresent
     }
 
     private fun installCompatibilityDlls(prepared: PreparedContainer) {
