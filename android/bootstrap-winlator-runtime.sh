@@ -174,7 +174,7 @@ replacement2 = '''        setupUI();
 
                 new AlertDialog.Builder(this)
                     .setTitle("Retro ISO - diagnostic InstallShield")
-                    .setMessage("Snapshot des logs Wine/COM :\n\n" + logText)
+                    .setMessage("Snapshot des logs Wine/COM :\\n\\n" + logText)
                     .setPositiveButton("Continuer", null)
                     .setCancelable(true)
                     .show();
