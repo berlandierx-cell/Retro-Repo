@@ -68,9 +68,23 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
         val gameExecutable = findInstalledExecutable(container, profile.executable)
         val patchDir = File(gameDir, "Patch")
-        val patchExecutable = patchDir.listFiles()
-            ?.firstOrNull { it.isFile && it.extension.equals("exe", true) &&
+        val patchCandidates = patchDir.listFiles()
+            ?.filter { it.isFile && it.extension.equals("exe", true) &&
                 (it.name.contains("107", true) || it.name.contains("patch", true)) }
+            ?: emptyList()
+
+        val patchExecutable = when (profile.language.lowercase()) {
+            "fr", "fra", "french" -> {
+                patchCandidates.firstOrNull {
+                    val n = it.name.lowercase()
+                    n.contains("_fr") || n.contains("-fr") || n.contains("french") || n.contains("franc")
+                } ?: patchCandidates.firstOrNull {
+                    val n = it.name.lowercase()
+                    !n.contains("_en") && !n.contains("-en") && !n.contains("english")
+                }
+            }
+            else -> patchCandidates.firstOrNull()
+        }
         val compatibilityDlls = patchDir.listFiles()
             ?.filter { it.isFile && it.extension.equals("dll", true) }
             ?: emptyList()
@@ -117,7 +131,10 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
     fun launchPatch(prepared: PreparedContainer) {
         val patch = prepared.patchExecutable
-            ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le dossier Patch.")
+            ?: throw IllegalStateException(
+                "Patch 1.0.7 compatible introuvable. L'installation Gangsters 2 est française : " +
+                "le patch EN ne peut pas être appliqué. Ajoute le patch 1.0.7 FR."
+            )
         val gameExe = prepared.gameExecutable
             ?: throw IllegalStateException("Gangsters2.exe introuvable avant application du patch.")
 
