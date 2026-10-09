@@ -228,7 +228,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
         manager.containers.firstOrNull { it.name == wantedName }?.let {
             it.drives = "D:" + gameDir.absolutePath
+            it.startupSelection = Container.STARTUP_SELECTION_NORMAL
             it.saveData()
+            WineUtils.changeServicesStatus(it, Container.STARTUP_SELECTION_NORMAL)
             return it
         }
 
@@ -240,7 +242,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
                     .put("envVars", Container.DEFAULT_ENV_VARS)
                     .put("wincomponents", Container.DEFAULT_WINCOMPONENTS)
                     .put("drives", "D:" + gameDir.absolutePath)
-                    .put("startupSelection", Container.STARTUP_SELECTION_ESSENTIAL.toInt())
+                    .put("startupSelection", Container.STARTUP_SELECTION_NORMAL.toInt())
 
                 manager.createContainerAsync(data) { created ->
                     if (created == null) {
@@ -308,6 +310,11 @@ class EmbeddedWinlatorBackend(private val context: Context) {
                 }
             }
         }
+
+        // Full service stack is required by legacy InstallShield COM.
+        // In particular RpcSs must not be disabled.
+        container.startupSelection = Container.STARTUP_SELECTION_NORMAL
+        WineUtils.changeServicesStatus(container, Container.STARTUP_SELECTION_NORMAL)
 
         val winVersions = WinVersions.getWinVersions()
         val index = winVersions.indexOfFirst { it.version == profile.windows }
