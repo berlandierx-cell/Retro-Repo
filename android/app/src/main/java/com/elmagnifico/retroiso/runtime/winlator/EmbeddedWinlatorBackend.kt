@@ -295,6 +295,37 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             }
     }
 
+    fun describeInstalledExecutables(prepared: PreparedContainer): String {
+        val exe = prepared.gameExecutable
+            ?: return "Gangsters2.exe introuvable : impossible d'identifier le dossier d'installation."
+
+        val root = exe.parentFile
+        val candidates = root.walkTopDown()
+            .maxDepth(3)
+            .filter {
+                it.isFile && (
+                    it.extension.equals("exe", ignoreCase = true) ||
+                    it.extension.equals("dll", ignoreCase = true)
+                )
+            }
+            .sortedWith(compareBy<File>({ it.extension.lowercase() }, { it.name.lowercase() }))
+            .toList()
+
+        val lines = mutableListOf<String>()
+        lines += "Dossier : " + root.absolutePath
+        lines += "EXE/DLL trouvés : " + candidates.size
+        lines += ""
+
+        candidates.forEach { file ->
+            val rel = file.relativeTo(root).invariantSeparatorsPath
+            val stamp = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.ROOT)
+                .format(java.util.Date(file.lastModified()))
+            lines += "[" + file.extension.uppercase() + "] " + rel +
+                " | " + file.length() + " octets | " + stamp
+        }
+        return lines.joinToString("\n")
+    }
+
     fun describeInstalledGameFiles(prepared: PreparedContainer): String {
         val exe = prepared.gameExecutable
             ?: return "Gangsters2.exe introuvable : impossible d'identifier le dossier d'installation."
