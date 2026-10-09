@@ -296,6 +296,24 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     /**
+     * Relance l'Autorun du CD virtuel après installation.
+     * Cela reproduit le comportement "insérer le CD puis Jouer" du jeu original.
+     */
+    fun launchAutorun(prepared: PreparedContainer) {
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("enable_wine_debug", false)
+            .putInt("box64_logs", 0)
+            .apply()
+
+        val intent = Intent(context, XServerDisplayActivity::class.java).apply {
+            putExtra("container_id", prepared.containerId)
+            putExtra("exec_path", prepared.installerFile.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    /**
      * Diagnostic uniquement : ouvre l'ISO via le mécanisme natif Winlator.
      */
     fun launchIso(prepared: PreparedContainer) {
