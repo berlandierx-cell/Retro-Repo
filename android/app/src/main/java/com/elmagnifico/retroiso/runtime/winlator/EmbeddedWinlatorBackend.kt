@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
 import java.util.Locale
+import java.security.MessageDigest
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 
@@ -112,6 +113,22 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         context.startActivity(intent)
     }
 
+    private fun patchStateDir(prepared: PreparedContainer): File =
+        File(prepared.patchExecutable?.parentFile ?: prepared.rootDir, ".retroiso").apply { mkdirs() }
+
+    private fun sha256(file: File): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(64 * 1024)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) }
+    }
+
     fun launchPatch(prepared: PreparedContainer) {
         val patch = prepared.patchExecutable
             ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le pack ajouté.")
@@ -135,6 +152,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             registry.removeValue("Software\\Gangsters2g", "VERSION")
         }
 
+        val stateDir = patchStateDir(prepared)
+        File(stateDir, "prepatch.sha256").writeText(sha256(gameExe))
+
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", false)
             .putInt("box64_logs", 0)
@@ -150,13 +170,27 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     fun isPatchApplied(prepared: PreparedContainer): Boolean {
+        val exe = prepared.gameExecutable ?: return false
+        val stateDir = patchStateDir(prepared)
+        val appliedMarker = File(stateDir, "patch107.applied")
+        if (appliedMarker.isFile) return true
+
+        // Most robust signal: the official updater modifies Gangsters2.exe.
+        // Compare it with the executable hash captured immediately before
+        // launching the updater. This avoids WoW64 registry redirection quirks.
+        val preHashFile = File(stateDir, "prepatch.sha256")
+        if (preHashFile.isFile) {
+            val before = preHashFile.readText().trim()
+            val after = runCatching { sha256(exe) }.getOrNull()
+            if (!after.isNullOrBlank() && before.isNotBlank() && after != before) {
+                appliedMarker.writeText(after)
+                return true
+            }
+        }
+
         val systemReg = File(prepared.rootDir, ".wine/system.reg")
         if (!systemReg.isFile) return false
 
-        // Hothouse Updater is a 32-bit program. Under Wine WoW64 its HKLM
-        // writes can be redirected to Wow6432Node. Older updater builds also
-        // differ on whether VERSION is REG_DWORD or REG_SZ, so don't assume
-        // one exact representation.
         val candidateKeys = listOf(
             "Software\\Gangsters2g",
             "Software\\Wow6432Node\\Gangsters2g",
@@ -166,25 +200,29 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         WineRegistryEditor(systemReg).use { registry ->
             for (key in candidateKeys) {
                 try {
-                    if (registry.getDwordValue(key, "VERSION") != null) return true
-                } catch (_: Exception) {
-                    // VERSION may be a string in some updater builds.
-                }
+                    if (registry.getDwordValue(key, "VERSION") != null) {
+                        appliedMarker.writeText("registry-dword")
+                        return true
+                    }
+                } catch (_: Exception) {}
                 try {
                     val value = registry.getStringValue(key, "VERSION")
-                    if (!value.isNullOrBlank()) return true
+                    if (!value.isNullOrBlank()) {
+                        appliedMarker.writeText("registry-string")
+                        return true
+                    }
                 } catch (_: Exception) {}
             }
         }
 
-        // Final compatibility fallback: inspect the registry text directly so
-        // an uncommon Wine redirection/casing cannot make Retro ISO relaunch
-        // an already-successful patch forever.
         val text = systemReg.readText()
-        val lower = text.lowercase()
-        val keyPresent = lower.contains("gangsters2g")
-        val versionPresent = Regex("""(?im)^"version"=""").containsMatchIn(text)
-        return keyPresent && versionPresent
+        val keyPresent = text.contains("Gangsters2g", ignoreCase = true)
+        val versionPresent = Regex("""(?im)^"VERSION"=(?:dword:[0-9a-f]+|".*")""").containsMatchIn(text)
+        if (keyPresent && versionPresent) {
+            appliedMarker.writeText("registry-text")
+            return true
+        }
+        return false
     }
 
     private fun installCompatibilityDlls(prepared: PreparedContainer) {
