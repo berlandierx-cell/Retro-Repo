@@ -68,7 +68,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val container = getOrCreateContainer(gameDir, profile)
         configureContainer(container, gameDir, cdDir, profile)
 
-        val gameExecutable = findInstalledExecutable(container, profile.executable)
+        val gameExecutable = findInstalledExecutable(container, profile)
         val patchDir = File(gameDir, "Patch")
         val patchExecutable = patchDir.walkTopDown()
             .firstOrNull {
@@ -270,17 +270,14 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         context.startActivity(intent)
     }
 
-    private fun findInstalledExecutable(container: Container, executableName: String): File? {
+    private fun findInstalledExecutable(container: Container, profile: GameProfile): File? {
         val driveC = File(container.rootDir, ".wine/drive_c")
         if (!driveC.isDirectory) return null
 
-        val known = listOf(
-            File(driveC, "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/" + executableName),
-            File(driveC, "Program Files/Eidos Interactive/Hothouse Creations/Gangsters 2/" + executableName),
-            File(driveC, "Program Files (x86)/Hothouse Creations/Gangsters 2/" + executableName),
-            File(driveC, "Program Files/Hothouse Creations/Gangsters 2/" + executableName)
-        )
-        known.firstOrNull { it.isFile }?.let { return it }
+        profile.installedExecutablePath?.let { rel ->
+            val exact = File(driveC, rel)
+            return exact.takeIf { it.isFile }
+        }
 
         return driveC.walkTopDown()
             .onEnter { dir ->
@@ -289,7 +286,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
                 !dir.name.equals("syswow64", ignoreCase = true)
             }
             .firstOrNull {
-                it.isFile && it.name.equals(executableName, ignoreCase = true)
+                it.isFile && it.name.equals(profile.executable, ignoreCase = true)
             }
     }
 
