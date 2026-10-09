@@ -46,7 +46,8 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val installerDosPath: String,
         val gameExecutable: File?,
         val patchExecutable: File?,
-        val compatibilityDlls: List<File>
+        val compatibilityDlls: List<File>,
+        val rootDir: File
     )
 
     suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
@@ -73,16 +74,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
                 it.isFile && it.extension.equals("exe", true) &&
                     (it.name.contains("107", true) || it.name.contains("patch", true))
             }
-        val compatibilityDlls = patchDir.listFiles()
-            ?.filter { it.isFile && it.extension.equals("dll", true) }
-            ?: emptyList()
-
-        // Once the game is installed, place compatibility DLLs next to the EXE.
-        if (gameExecutable != null && compatibilityDlls.isNotEmpty()) {
-            compatibilityDlls.forEach { dll ->
-                dll.copyTo(File(gameExecutable.parentFile, dll.name), overwrite = true)
-            }
-        }
+        val compatibilityDlls = patchDir.walkTopDown()
+            .filter { it.isFile && it.extension.equals("dll", true) }
+            .toList()
 
         return PreparedContainer(
             containerId = container.id,
@@ -93,7 +87,8 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             installerDosPath = profile.cdRom.drive + "\\" + profile.installer,
             gameExecutable = gameExecutable,
             patchExecutable = patchExecutable,
-            compatibilityDlls = compatibilityDlls
+            compatibilityDlls = compatibilityDlls,
+            rootDir = container.rootDir
         )
     }
 
@@ -134,7 +129,8 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val systemReg = File(prepared.rootDir, ".wine/system.reg")
         WineRegistryEditor(systemReg).use { registry ->
             registry.setStringValue("Software\\Gangsters2g", "PATH", windowsInstallDir)
-            registry.setDwordValue("Software\\Gangsters2g", "VERSION", 100)
+            // VERSION is the updater's own success marker. Never fabricate it.
+            registry.removeValue("Software\\Gangsters2g", "VERSION")
         }
 
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
@@ -150,6 +146,20 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         context.startActivity(intent)
     }
 
+    fun isPatchApplied(prepared: PreparedContainer): Boolean {
+        val systemReg = File(prepared.rootDir, ".wine/system.reg")
+        return WineRegistryEditor(systemReg).use { registry ->
+            registry.getDwordValue("Software\\Gangsters2g", "VERSION") != null
+        }
+    }
+
+    private fun installCompatibilityDlls(prepared: PreparedContainer) {
+        val exe = prepared.gameExecutable ?: return
+        prepared.compatibilityDlls.forEach { dll ->
+            dll.copyTo(File(exe.parentFile, dll.name), overwrite = true)
+        }
+    }
+
     /**
      * Lance directement le jeu installé dans C:, avec le répertoire de travail
      * automatiquement dérivé par Winlator à partir du chemin de l'exécutable.
@@ -157,6 +167,10 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     fun launchGame(prepared: PreparedContainer) {
         val exe = prepared.gameExecutable
             ?: throw IllegalStateException("Jeu installé introuvable dans le container.")
+
+        if (prepared.patchExecutable != null && isPatchApplied(prepared)) {
+            installCompatibilityDlls(prepared)
+        }
 
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", false)
