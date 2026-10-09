@@ -43,7 +43,8 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val isoFile: File,
         val cdDir: File,
         val installerFile: File,
-        val installerDosPath: String
+        val installerDosPath: String,
+        val gameExecutable: File?
     )
 
     suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
@@ -63,13 +64,16 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val container = getOrCreateContainer(gameDir, profile)
         configureContainer(container, gameDir, cdDir, profile)
 
+        val gameExecutable = findInstalledExecutable(container, profile.executable)
+
         return PreparedContainer(
             containerId = container.id,
             containerName = container.name,
             isoFile = iso,
             cdDir = cdDir,
             installerFile = installerFile,
-            installerDosPath = profile.cdRom.drive + "\\" + profile.installer
+            installerDosPath = profile.cdRom.drive + "\\" + profile.installer,
+            gameExecutable = gameExecutable
         )
     }
 
@@ -91,6 +95,38 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+    }
+
+    /**
+     * Lance directement le jeu installé dans C:, avec le répertoire de travail
+     * automatiquement dérivé par Winlator à partir du chemin de l'exécutable.
+     */
+    fun launchGame(prepared: PreparedContainer) {
+        val exe = prepared.gameExecutable
+            ?: throw IllegalStateException("Jeu installé introuvable dans le container.")
+
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("enable_wine_debug", false)
+            .putInt("box64_logs", 0)
+            .apply()
+
+        val intent = Intent(context, XServerDisplayActivity::class.java).apply {
+            putExtra("container_id", prepared.containerId)
+            putExtra("exec_path", exe.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    private fun findInstalledExecutable(container: Container, executableName: String): File? {
+        val driveC = File(container.rootDir, ".wine/drive_c")
+        if (!driveC.isDirectory) return null
+
+        return driveC.walkTopDown()
+            .maxDepth(8)
+            .firstOrNull {
+                it.isFile && it.name.equals(executableName, ignoreCase = true)
+            }
     }
 
     /**
