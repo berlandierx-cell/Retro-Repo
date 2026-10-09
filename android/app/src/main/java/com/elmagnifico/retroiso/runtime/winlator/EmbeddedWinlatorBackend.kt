@@ -119,6 +119,11 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val patch = prepared.patchExecutable
             ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le dossier Patch.")
 
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("enable_wine_debug", true)
+            .putInt("box64_logs", 0)
+            .apply()
+
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", patch.absolutePath)
