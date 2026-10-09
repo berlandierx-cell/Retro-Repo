@@ -69,12 +69,12 @@ fun App(store: GameStore) {
         }
     }
 
-    val patchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+    val patchPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
         val g = patchFor
-        if (uri != null && g != null) scope.launch {
+        if (uris.isNotEmpty() && g != null) scope.launch {
             try {
-                store.copyPatch(g, uri)
-                message = "Patch copié dans RetroIso/" + g.dir + "/Patch."
+                uris.forEach { store.copyPatch(g, it) }
+                message = uris.size.toString() + " fichier(s) de compatibilité ajouté(s)."
             } catch (e: Exception) {
                 message = "Erreur : " + e.message
             }
@@ -104,7 +104,17 @@ fun App(store: GameStore) {
                 }
                 val plan = runtime.prepare(game, store.gameDir(game))
                 val prepared = embedded.prepare(game, store.gameDir(game), plan.profile)
-                if (prepared.gameExecutable != null) {
+                if (prepared.gameExecutable != null && prepared.patchExecutable != null) {
+                    val marker = java.io.File(store.gameDir(game), "Patch/.patch107-launched")
+                    if (!marker.exists()) {
+                        marker.parentFile?.mkdirs()
+                        marker.writeText("1")
+                        embedded.launchPatch(prepared)
+                        message = "Patch 1.0.7 lancé. Termine son installation puis appuie de nouveau sur Jouer."
+                    } else {
+                        embedded.launchGame(prepared)
+                    }
+                } else if (prepared.gameExecutable != null) {
                     embedded.launchGame(prepared)
                 } else {
                     embedded.launchInstaller(prepared)
