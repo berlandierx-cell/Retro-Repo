@@ -10,6 +10,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -219,11 +221,20 @@ fun App(store: GameStore) {
         )
     }
 
-    message?.let {
+    message?.let { currentMessage ->
         AlertDialog(
             onDismissRequest = { message = null },
             confirmButton = { TextButton(onClick = { message = null }) { Text("OK") } },
-            text = { Text(it) }
+            text = {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 520.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(currentMessage)
+                }
+            }
         )
     }
 }
