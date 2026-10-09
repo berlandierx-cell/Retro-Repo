@@ -8,6 +8,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import org.apache.commons.compress.archivers.sevenz.SevenZFile
 import java.io.File
 import java.io.FileInputStream
 import java.util.UUID
@@ -94,12 +95,69 @@ class GameStore(private val ctx: Context) {
         return d
     }
 
-    /** Copie un patch dans <jeu>/Patch. */
+    /**
+     * Ajoute un correctif dans <jeu>/Patch.
+     * Les packs .7z sont extraits directement : Retro ISO peut donc recevoir
+     * le pack Gangsters 2 complet qui a déjà été validé sous Wine/Linux.
+     */
     suspend fun copyPatch(game: Game, uri: Uri) = withContext(Dispatchers.IO) {
-        val dest = File(gameDir(game), "Patch").apply { mkdirs() }
-        ctx.contentResolver.openInputStream(uri)!!.use { input ->
-            File(dest, displayName(uri)).outputStream().use { output -> input.copyTo(output) }
+        val name = displayName(uri)
+        val dest = File(gameDir(game), "Patch")
+
+        if (name.endsWith(".7z", ignoreCase = true)) {
+            // Un nouveau pack complet remplace tous les anciens essais afin
+            // d'éviter de mélanger patch EN, DLL et marqueurs précédents.
+            dest.deleteRecursively()
+            dest.mkdirs()
+
+            val archive = File(dest, "_pack.7z")
+            ctx.contentResolver.openInputStream(uri)!!.use { input ->
+                archive.outputStream().buffered().use { output -> input.copyTo(output) }
+            }
+
+            SevenZFile(archive).use { sevenZ ->
+                var entry = sevenZ.nextEntry
+                val rootPath = dest.canonicalFile.toPath()
+
+                while (entry != null) {
+                    val target = File(dest, entry.name).canonicalFile
+                    if (!target.toPath().startsWith(rootPath)) {
+                        throw IllegalStateException("Entrée 7z invalide : " + entry.name)
+                    }
+
+                    if (entry.isDirectory) {
+                        target.mkdirs()
+                    } else {
+                        target.parentFile?.mkdirs()
+                        target.outputStream().buffered().use { out ->
+                            val buffer = ByteArray(64 * 1024)
+                            var remaining = entry.size
+                            while (remaining > 0) {
+                                val read = sevenZ.read(
+                                    buffer,
+                                    0,
+                                    minOf(buffer.size.toLong(), remaining).toInt()
+                                )
+                                if (read <= 0) break
+                                out.write(buffer, 0, read)
+                                remaining -= read
+                            }
+                        }
+                    }
+                    entry = sevenZ.nextEntry
+                }
+            }
+
+            archive.delete()
+        } else {
+            dest.mkdirs()
+            ctx.contentResolver.openInputStream(uri)!!.use { input ->
+                File(dest, name).outputStream().use { output -> input.copyTo(output) }
+            }
         }
+
+        // Tout nouveau correctif doit pouvoir être relancé.
+        File(dest, ".patch107-launched").delete()
     }
 
     /**
