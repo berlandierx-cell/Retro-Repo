@@ -9,6 +9,7 @@ data class GameProfile(
     val arch: String,
     val installer: String,
     val executable: String,
+    val language: String = "",
     val cdRom: CdRomConfig,
     val patchVersion: String? = null,
     val dllOverrides: Map<String, String> = emptyMap()
@@ -35,6 +36,7 @@ data class GameProfile(
                 arch = o.optString("arch", "x86"),
                 installer = o.getString("installer"),
                 executable = o.getString("executable"),
+                language = o.optString("language"),
                 cdRom = CdRomConfig(
                     required = cd.optBoolean("required", false),
                     drive = cd.optString("drive", "X:"),
