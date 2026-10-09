@@ -9,6 +9,7 @@ data class GameProfile(
     val arch: String,
     val installer: String,
     val executable: String,
+    val installedExecutablePath: String? = null,
     val language: String = "",
     val cdRom: CdRomConfig,
     val patchVersion: String? = null,
@@ -36,6 +37,7 @@ data class GameProfile(
                 arch = o.optString("arch", "x86"),
                 installer = o.getString("installer"),
                 executable = o.getString("executable"),
+                installedExecutablePath = o.optString("installedExecutablePath").takeIf { it.isNotBlank() },
                 language = o.optString("language"),
                 cdRom = CdRomConfig(
                     required = cd.optBoolean("required", false),
