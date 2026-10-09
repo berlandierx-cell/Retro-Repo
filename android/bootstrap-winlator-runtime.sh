@@ -158,6 +158,29 @@ needle2 = '''        setupUI();
 '''
 replacement2 = '''        setupUI();
 
+        // Diagnostic snapshot for InstallShield hangs: even when a Windows
+        // window is mapped, dump recent Wine/COM logs instead of waiting for
+        // the guest process to terminate.
+        new Handler(Looper.getMainLooper()).postDelayed(() -> {
+            if (!isFinishing()) {
+                String logText;
+                synchronized (retroIsoBootLog) {
+                    logText = retroIsoBootLog.toString().trim();
+                }
+                if (logText.isEmpty()) logText = "Aucune sortie Wine/Box64 capturée.";
+                if (logText.length() > 9000) {
+                    logText = logText.substring(logText.length() - 9000);
+                }
+
+                new AlertDialog.Builder(this)
+                    .setTitle("Retro ISO - diagnostic InstallShield")
+                    .setMessage("Snapshot des logs Wine/COM :\n\n" + logText)
+                    .setPositiveButton("Continuer", null)
+                    .setCancelable(true)
+                    .show();
+            }
+        }, 15000);
+
         new Handler(Looper.getMainLooper()).postDelayed(() -> {
             if (!flags[0] && !isFinishing()) {
                 preloaderDialog.closeOnUiThread();
