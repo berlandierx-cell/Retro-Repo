@@ -105,12 +105,9 @@ fun App(store: GameStore) {
                 val plan = runtime.prepare(game, store.gameDir(game))
                 val prepared = embedded.prepare(game, store.gameDir(game), plan.profile)
                 if (prepared.gameExecutable != null && prepared.patchExecutable != null) {
-                    val marker = java.io.File(store.gameDir(game), "Patch/.patch107-launched")
-                    if (!marker.exists()) {
-                        marker.parentFile?.mkdirs()
-                        marker.writeText("1")
+                    if (!embedded.isPatchApplied(prepared)) {
                         embedded.launchPatch(prepared)
-                        message = "Patch 1.0.7 lancé. Termine son installation puis appuie de nouveau sur Jouer."
+                        message = "Patch 1.0.7 lancé. Termine l'updater puis appuie de nouveau sur Jouer."
                     } else {
                         embedded.launchGame(prepared)
                     }
