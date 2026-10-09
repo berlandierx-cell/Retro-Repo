@@ -296,6 +296,28 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     /**
+     * Test diagnostic : lance directement Setup.exe depuis le CD extrait.
+     */
+    fun launchCdSetup(prepared: PreparedContainer) {
+        val setup = File(prepared.cdDir, "Setup.exe")
+        if (!setup.isFile) {
+            throw IllegalStateException("Setup.exe introuvable dans le CD.")
+        }
+
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("enable_wine_debug", false)
+            .putInt("box64_logs", 0)
+            .apply()
+
+        val intent = Intent(context, XServerDisplayActivity::class.java).apply {
+            putExtra("container_id", prepared.containerId)
+            putExtra("exec_path", setup.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        context.startActivity(intent)
+    }
+
+    /**
      * Relance l'Autorun du CD virtuel après installation.
      * Cela reproduit le comportement "insérer le CD puis Jouer" du jeu original.
      */
