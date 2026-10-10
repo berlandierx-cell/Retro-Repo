@@ -111,10 +111,10 @@ fun App(store: GameStore) {
                         embedded.launchPatch(prepared)
                         message = "Patch 1.0.7 lancé. Termine l'updater puis appuie de nouveau sur Jouer."
                     } else {
-                        embedded.launchCdSetup(prepared)
+                        embedded.launchGame(prepared)
                     }
                 } else if (prepared.gameExecutable != null) {
-                    embedded.launchCdSetup(prepared)
+                    embedded.launchGame(prepared)
                 } else if (prepared.patchExecutable != null || prepared.compatibilityDlls.isNotEmpty()) {
                     throw IllegalStateException(
                         "Le jeu semble déjà installé mais Gangsters2.exe est introuvable. " +
