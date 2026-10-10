@@ -309,9 +309,23 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
     private fun findBaseGangstersExecutable(prepared: PreparedContainer): File? {
         val driveC = File(prepared.rootDir, ".wine/drive_c")
-        val base = File(driveC, "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/Gangsters2.exe")
-        return base.takeIf { it.isFile }
+        if (!driveC.isDirectory) return null
+        return installedGameExecutables(driveC)
+            .firstOrNull { it.name.equals("Gangsters2.exe", ignoreCase = true) }
     }
+
+    fun canApplyGangstersPatch(prepared: PreparedContainer): Boolean =
+        findBaseGangstersExecutable(prepared) != null
+
+    private fun installedGameExecutables(driveC: File): List<File> =
+        driveC.walkTopDown()
+            .onEnter { dir ->
+                !dir.name.equals("windows", ignoreCase = true) &&
+                !dir.name.equals("system32", ignoreCase = true) &&
+                !dir.name.equals("syswow64", ignoreCase = true)
+            }
+            .filter { it.isFile && it.extension.equals("exe", ignoreCase = true) }
+            .toList()
 
     private fun findInstalledExecutable(container: Container, profile: GameProfile): File? {
         val driveC = File(container.rootDir, ".wine/drive_c")
@@ -319,18 +333,15 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
         profile.installedExecutablePath?.let { rel ->
             val exact = File(driveC, rel)
-            return exact.takeIf { it.isFile }
+            if (exact.isFile) return exact
         }
 
-        return driveC.walkTopDown()
-            .onEnter { dir ->
-                !dir.name.equals("windows", ignoreCase = true) &&
-                !dir.name.equals("system32", ignoreCase = true) &&
-                !dir.name.equals("syswow64", ignoreCase = true)
-            }
-            .firstOrNull {
-                it.isFile && it.name.equals(profile.executable, ignoreCase = true)
-            }
+        val candidates = installedGameExecutables(driveC)
+        val names = listOf(profile.executable, "Gangsters2SpawnedVersion.exe", "Gangsters2.exe")
+            .distinct()
+        return names.firstNotNullOfOrNull { name ->
+            candidates.firstOrNull { it.name.equals(name, ignoreCase = true) }
+        }
     }
 
     fun describeInstalledExecutables(prepared: PreparedContainer): String {
