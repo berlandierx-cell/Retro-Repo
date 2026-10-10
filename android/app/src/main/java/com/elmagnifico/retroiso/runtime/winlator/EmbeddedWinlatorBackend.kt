@@ -52,6 +52,43 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val rootDir: File
     )
 
+    suspend fun deleteInstalledGame(profile: GameProfile) = withContext(Dispatchers.IO) {
+        ensureRootFs()
+
+        val manager = ContainerManager(context)
+        val wantedName = "retroiso-" + profile.id
+        val container = manager.containers.firstOrNull { it.name == wantedName } ?: return@withContext
+
+        val wineDir = File(container.rootDir, ".wine")
+        val driveC = File(wineDir, "drive_c")
+
+        // Remove only this game's installed files, never the shared Wine runtime.
+        profile.installedExecutablePath?.let { rel ->
+            val exe = File(driveC, rel)
+            exe.parentFile?.let { installDir ->
+                if (installDir.isDirectory) installDir.deleteRecursively()
+            }
+        }
+
+        // Remove legacy installer/updater registry state so the next install is clean.
+        val systemReg = File(wineDir, "system.reg")
+        if (systemReg.isFile) {
+            WineRegistryEditor(systemReg).use { registry ->
+                registry.removeKey("Software\\Gangsters2g", true)
+                registry.removeKey("Software\\Wow6432Node\\Gangsters2g", true)
+                registry.removeKey("Software\\WOW6432Node\\Gangsters2g", true)
+            }
+        }
+
+        // Also remove per-user keys if an installer created them there.
+        val userReg = File(wineDir, "user.reg")
+        if (userReg.isFile) {
+            WineRegistryEditor(userReg).use { registry ->
+                registry.removeKey("Software\\Gangsters2g", true)
+            }
+        }
+    }
+
     suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
         val iso = File(gameDir, profile.cdRom.image)
         require(iso.isFile) { "ISO introuvable : " + iso.absolutePath }
