@@ -206,7 +206,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     fun isPatchApplied(prepared: PreparedContainer): Boolean {
-        val exe = prepared.gameExecutable ?: return false
+        val exe = findBaseGangstersExecutable(prepared.container) ?: return false
         val stateDir = patchStateDir(prepared)
         val appliedMarker = File(stateDir, "patch107.applied")
         if (appliedMarker.isFile) return true
@@ -305,6 +305,12 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+    }
+
+    private fun findBaseGangstersExecutable(container: Container): File? {
+        val driveC = File(container.rootDir, ".wine/drive_c")
+        val base = File(driveC, "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/Gangsters2.exe")
+        return base.takeIf { it.isFile }
     }
 
     private fun findInstalledExecutable(container: Container, profile: GameProfile): File? {
