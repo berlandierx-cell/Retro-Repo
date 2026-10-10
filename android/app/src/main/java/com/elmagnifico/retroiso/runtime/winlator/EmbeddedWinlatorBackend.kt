@@ -169,7 +169,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     fun launchPatch(prepared: PreparedContainer) {
         val patch = prepared.patchExecutable
             ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le pack ajouté.")
-        val gameExe = prepared.gameExecutable
+        val gameExe = findBaseGangstersExecutable(prepared)
             ?: throw IllegalStateException("Gangsters2.exe introuvable avant application du patch.")
 
         // The original Hothouse updater does not discover the install path by
@@ -206,7 +206,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     fun isPatchApplied(prepared: PreparedContainer): Boolean {
-        val exe = findBaseGangstersExecutable(prepared.container) ?: return false
+        val exe = findBaseGangstersExecutable(prepared) ?: return false
         val stateDir = patchStateDir(prepared)
         val appliedMarker = File(stateDir, "patch107.applied")
         if (appliedMarker.isFile) return true
@@ -307,8 +307,8 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         context.startActivity(intent)
     }
 
-    private fun findBaseGangstersExecutable(container: Container): File? {
-        val driveC = File(container.rootDir, ".wine/drive_c")
+    private fun findBaseGangstersExecutable(prepared: PreparedContainer): File? {
+        val driveC = File(prepared.rootDir, ".wine/drive_c")
         val base = File(driveC, "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/Gangsters2.exe")
         return base.takeIf { it.isFile }
     }
