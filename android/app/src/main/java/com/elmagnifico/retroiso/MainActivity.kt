@@ -182,8 +182,21 @@ fun App(store: GameStore) {
                                 message = "Cache local libéré. L'ISO reste disponible depuis Drive."
                             },
                             onDelete = {
-                                store.delete(g)
-                                games = store.load()
+                                scope.launch {
+                                    try {
+                                        runtimeBusy = "Suppression de " + g.name
+                                        runtime.loadProfileForName(g.name)?.let { profile ->
+                                            embedded.deleteInstalledGame(profile)
+                                        }
+                                        store.delete(g)
+                                        games = store.load()
+                                        message = "Jeu supprimé complètement : installation Wine, registre, ISO, CD et patch effacés."
+                                    } catch (e: Exception) {
+                                        message = "Erreur pendant la suppression complète : " + (e.message ?: "inconnue")
+                                    } finally {
+                                        runtimeBusy = null
+                                    }
+                                }
                             }
                         )
                     }
