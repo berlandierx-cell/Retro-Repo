@@ -9,12 +9,12 @@
     "image": "disc.iso"
   },
   "installer": "Autorun.exe",
-  "executable": "Gangsters2.exe",
+  "executable": "Gangsters2SpawnedVersion.exe",
   "patch": "1.0.7",
   "compatibility": {
     "dllOverrides": {
       "security": "native,builtin"
     }
   },
-  "installedExecutablePath": "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/Gangsters2.exe"
+  "installedExecutablePath": "Program Files (x86)/Eidos Interactive/Hothouse Creations/Gangsters 2/Gangsters2SpawnedVersion.exe"
 }
