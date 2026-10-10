@@ -107,10 +107,14 @@ fun App(store: GameStore) {
                 val plan = runtime.prepare(game, store.gameDir(game))
                 val prepared = embedded.prepare(game, store.gameDir(game), plan.profile)
                 if (prepared.gameExecutable != null && prepared.patchExecutable != null) {
-                    if (!embedded.isPatchApplied(prepared)) {
+                    if (embedded.isPatchApplied(prepared)) {
+                        embedded.launchGame(prepared)
+                    } else if (embedded.canApplyGangstersPatch(prepared)) {
                         embedded.launchPatch(prepared)
                         message = "Patch 1.0.7 lancé. Termine l'updater puis appuie de nouveau sur Jouer."
                     } else {
+                        // Some installations use only the spawned executable.
+                        // Do not block a working installation on an incompatible updater.
                         embedded.launchGame(prepared)
                     }
                 } else if (prepared.gameExecutable != null) {
