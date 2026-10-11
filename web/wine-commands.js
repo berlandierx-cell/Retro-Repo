@@ -7,9 +7,10 @@ last_job=
 while :; do
   read -r stop </home/username/retroiso-control/stop
   if [ "$stop" = stop ]; then
-    if [ -n "$job_pid" ]; then kill "$job_pid" 2>/dev/null; fi
+    # Let the launcher reap Wine normally; SIGTERM of BusyBox ash faults in this runtime.
     /opt/wine/bin/wineserver -k
     /opt/wine/bin/wineserver -w
+    if [ -n "$job_pid" ]; then wait "$job_pid"; fi
     echo STOPPED >/home/username/retroiso-control/stopped
     exit 0
   fi
