@@ -67,7 +67,7 @@ async function boot(machine, program, maintenance = false) {
   await close(); await cacheWine(); const release = await lock(machine.id);
   const frame = document.createElement('iframe'); frame.title = machine.name; frame.src = 'wine-frame.html';
   active = {machine, frame, release}; selected = machine;
-  $('#title').textContent = machine.name; $('#logs').textContent = ''; $('#program').replaceChildren(); $('#player').hidden = false;
+  $('#title').textContent = machine.name; $('#logs').textContent = ''; $('#program').replaceChildren(); $('#player').dataset.error = ''; $('#player').hidden = false;
   const loaded = new Promise((resolve, reject) => { frame.onload = resolve; frame.onerror = () => reject(new Error('Ouverture du moteur impossible.')); });
   $('#frame-host').replaceChildren(frame);
   try { await loaded; await request('init', {config: {...machine, program, maintenance, wineFile: WINE_FILE}}, 420000); }
@@ -85,6 +85,7 @@ window.addEventListener('message', async event => {
   if (message.log) { const logs = $('#logs'); logs.textContent = (logs.textContent + message.log + '\n').slice(-24000); }
   if (message.proof) { $('#engine-status').textContent = message.proof.includes('PERSISTENCE OK') ? 'Test Windows : PERSISTENCE OK. Le programme a retrouvé le fichier existant.' : 'Test Windows : écriture réussie. Ferme puis relance le test pour vérifier la conservation.'; }
   if (message.fatal) {
+    $('#player').dataset.error = message.fatal;
     status(message.fatal); $('#engine-status').textContent = message.fatal;
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error(message.fatal)); } pending.clear();
   }

@@ -6,11 +6,22 @@ import {softwarePresenter, configureGLCanvas} from './wine-video.js';
 const send = data => parent.postMessage({retroWine: true, ...data}, location.origin);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 let config, prefix, initialized = false, timer, stopped = false, jobId = 0, initialMarkerSize = 0, lastResult = '', syncTail = Promise.resolve();
+let checkpointing = false;
+const errorText = error => error?.message || error?.code || (error?.errno ? 'erreur de stockage ' + error.errno : String(error));
 const fs = () => globalThis.FS;
 const sync = populate => {
   const operation = syncTail.then(() => new Promise((resolve, reject) => fs().syncfs(populate, error => error ? reject(error) : resolve())));
   syncTail = operation.catch(() => {}); return operation;
 };
+async function checkpoint() {
+  if (checkpointing || stopped) return;
+  checkpointing = true;
+  // IDBFS first scans paths, then reads them asynchronously. Freeze the single
+  // guest CPU so Wine cannot rename/delete a scanned file before it is copied.
+  globalThis.Module.pauseMainLoop?.();
+  try { await sync(false); globalThis.Module.resumeMainLoop?.(); }
+  finally { checkpointing = false; }
+}
 function tell(stage, detail) { send({stage, detail}); }
 function queueJob(program) {
   if (stopped) throw new Error('Cette session est fermée. Relance le PC.');
@@ -64,6 +75,8 @@ async function prepare() {
 }
 async function stopGuest() {
   clearInterval(timer);
+  await syncTail;
+  globalThis.Module.resumeMainLoop?.();
   if (!config.maintenance && !stopped) {
     tell('closing', 'Fermeture des programmes et enregistrement du registre…');
     fs().writeFile('/control/stop', 'stop\n');
@@ -139,7 +152,7 @@ window.addEventListener('message', async event => {
             tell('starting', 'Wine démarre. Le premier lancement peut prendre plusieurs minutes.');
             globalThis.callMain(['-root', prefix, '-zip', '/wine.zip', '-mount_drive', '/cdrom', 'd', '-mount', '/control', '/home/username/retroiso-control', '-env', 'WINELOADERNOEXEC=1', '-env', 'WINEDEBUG=-all', '-resolution', '800x600', '/bin/sh', '/home/username/retroiso-control/daemon.sh']);
             timer = setInterval(() => {
-              sync(false).catch(error => { globalThis.Module.pauseMainLoop?.(); send({fatal: 'Enregistrement local impossible : ' + error.message}); clearInterval(timer); });
+              checkpoint().catch(error => { globalThis.Module.pauseMainLoop?.(); send({fatal: 'Enregistrement local impossible : ' + errorText(error)}); clearInterval(timer); });
               const marker = prefix + '/home/username/.wine/drive_c/retroiso-persistence.txt';
               if (config.program === 'test' && fs().analyzePath(marker).exists && fs().stat(marker).size > initialMarkerSize) send({proof: fs().readFile(marker, {encoding: 'utf8'})});
               const result = fs().readFile('/control/result', {encoding: 'utf8'}).trim();

@@ -22,7 +22,10 @@ try {
   await page.goto('http://127.0.0.1:4173/wine.html');
   await page.locator('#status').filter({hasText: 'Prêt.'}).waitFor({timeout: 30000});
   await page.locator('#test').click();
-  await Promise.race([page.locator('#engine-status').filter({hasText: 'écriture réussie'}).waitFor({timeout: 360000}), browserError]);
+  await Promise.race([page.waitForFunction(expected => {
+    const error = document.getElementById('player').dataset.error; if (error) throw new Error(error);
+    return document.getElementById('engine-status').textContent.includes(expected);
+  }, 'écriture réussie', {timeout: 360000}), browserError]);
   console.log('Windows file write: PASS');
   await page.screenshot({path: 'browser-results/first-launch.png', fullPage: true});
   const screen = await page.locator('#frame-host').screenshot({path: 'browser-results/windows-screen.png'});
@@ -40,12 +43,34 @@ try {
   });
   if (!pixels.initialized || !pixels.width || !pixels.height) throw new Error('Real graphical input/canvas was not initialized');
   await page.locator('#close').click(); await page.locator('#player').waitFor({state: 'hidden', timeout: 120000});
+  const registry = await page.evaluate(async () => {
+    const {machines} = await import('./storage.js');
+    const machine = (await machines.list()).find(item => item.kind === 'wine' && item.diagnostic);
+    if (!machine) throw new Error('Windows profile missing after close');
+    const directory = '/retro-wine/' + machine.id;
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open(directory);
+      open.onerror = () => reject(open.error);
+      open.onupgradeneeded = () => { open.transaction.abort(); reject(new Error('Wine storage was not persisted')); };
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('FILE_DATA', 'readonly');
+        const read = tx.objectStore('FILE_DATA').get(directory + '/home/username/.wine/user.reg');
+        read.onsuccess = () => resolve(read.result?.contents ? new TextDecoder().decode(read.result.contents) : '');
+        read.onerror = () => reject(read.error); tx.oncomplete = () => db.close();
+      };
+    });
+  });
+  if (!registry.includes('"DirectDrawRenderer"="gdi"') || !registry.includes('"PersistenceMarker"="Windows-registry-write"')) throw new Error('Wine registry was not saved at shutdown');
+  console.log('Wine registry persisted on close: PASS');
   await page.reload(); await page.locator('#status').filter({hasText: 'Prêt.'}).waitFor();
-  await page.locator('#test').click(); await Promise.race([page.locator('#engine-status').filter({hasText: 'PERSISTENCE OK'}).waitFor({timeout: 360000}), browserError]);
+  await page.locator('#test').click(); await Promise.race([page.waitForFunction(expected => {
+    const error = document.getElementById('player').dataset.error; if (error) throw new Error(error);
+    return document.getElementById('engine-status').textContent.includes(expected);
+  }, 'PERSISTENCE OK', {timeout: 360000}), browserError]);
   await page.screenshot({path: 'browser-results/cold-restart.png', fullPage: true});
   await page.locator('#close').click(); await page.locator('#player').waitFor({state: 'hidden', timeout: 120000});
   if (diagnostic.length) throw new Error('Browser errors: ' + diagnostic.join('\n'));
-  await writeFile('browser-results/result.json', JSON.stringify({windowsFileWrite: true, coldRestart: true, nonBlackScreenPixels: litPixels, canvas: pixels, testedBrowser: await browser.version(), mobileViewport: true, pixel9aHardwareTest: false}, null, 2));
+  await writeFile('browser-results/result.json', JSON.stringify({windowsFileWrite: true, registryPersisted: true, coldRestart: true, nonBlackScreenPixels: litPixels, canvas: pixels, testedBrowser: await browser.version(), mobileViewport: true, pixel9aHardwareTest: false}, null, 2));
   console.log('REAL WINDOWS WRITE AND COLD RESTART: PASS');
 } catch (error) {
   if (browser) {

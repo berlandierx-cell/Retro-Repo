@@ -70,7 +70,9 @@ Il n'est pas nécessaire de rendre le dossier public.
 
 Wine est téléchargé dans OPFS une fois (99 456 246 octets). Chaque profil monte
 son propre IDBFS avec un verrou exclusif par onglet. Les fichiers modifiés sont
-copiés dans IndexedDB toutes les cinq secondes. La fermeture termine les
+copiés dans IndexedDB toutes les cinq secondes. Le processeur invité est
+brièvement suspendu pendant chaque copie pour conserver un ensemble cohérent
+de fichiers pendant les changements de noms effectués par Wine. La fermeture termine les
 programmes Wine, attend wineserver, copie les fichiers puis détruit le moteur.
 En cas d'échec d'enregistrement, la session reste ouverte et l'erreur est affichée.
 La RAM n'est pas sauvegardée : le jeu se relance depuis son installation.
