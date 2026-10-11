@@ -12,8 +12,8 @@ android {
         applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
-        versionCode = 11
-        versionName = "0.5.5-gangsters-screen-fit"
+        versionCode = 12
+        versionName = "0.5.6-touch-controls"
         ndk {
             abiFilters += "arm64-v8a"
         }
