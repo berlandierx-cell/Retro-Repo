@@ -4,17 +4,20 @@ Bibliothèque de vieux jeux Windows : ISO et sauvegardes sur Google Drive, lance
 
 ## Version navigateur
 
-La nouvelle version dans [`web/`](web/README.md) utilise un PC x86 v86 dans
-le navigateur, avec disques persistants et transfert des installations vers
-Google Drive. Le même site est prévu pour Android et Linux. Le workflow
+La version dans [`web/`](web/README.md) propose un espace Wine/Boxedwine pour
+les programmes Windows x86, sans image Microsoft Windows, et conserve le PC
+v86 pour les images de systèmes anciens. Les installations sont persistantes
+et peuvent être transférées sur Google Drive. Le même site sert Android et Linux. Le workflow
 `Build and publish Retro Iso Web` construit, teste et publie sur GitHub Pages
 une fois Pages configuré pour GitHub Actions.
 
-Le démarrage, les écritures du disque et la reprise de session sont testés
-avec un petit disque de diagnostic original. La compatibilité Windows/jeux
-sur Pixel 9a et les appels Drive authentifiés restent à vérifier. Une image
-Windows compatible et un identifiant OAuth Web sont nécessaires ; aucun
-Windows ni jeu commercial n'est inclus.
+Le PC v86 est vérifié par un disque de diagnostic original. L'espace Wine
+dispose d'un programme Win32 original qui écrit un fichier et affiche le
+résultat : le job Chromium doit vérifier l'écriture et le redémarrage avant
+la publication. La compatibilité de Gangsters 2 et les performances sur Pixel
+9a restent à valider. La connexion Drive a été confirmée par l'utilisateur ;
+les nouveaux transferts d'installations Wine restent à vérifier en situation
+réelle. Aucun jeu commercial ni installation Microsoft Windows n'est inclus.
 
 - `ui/` : la page unique (PC et téléphone)
 - `engine/` : moteur PC (Linux) : Drive, Wine, sauvegardes

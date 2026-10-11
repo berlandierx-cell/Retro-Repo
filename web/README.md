@@ -1,7 +1,8 @@
 # Rétro Iso dans le navigateur
 
-Cette version remplace le lancement Android natif par un PC x86 émulé avec
-v86 0.5.471. Le même site sert Android et Linux. Les calculs sont effectués
+Cette version propose un environnement Wine 11 avec Boxedwine (page
+`wine.html`), sans installation Microsoft Windows, et conserve le PC x86
+v86 0.5.471 sur l'accueil. Le même site sert Android et Linux. Les calculs sont effectués
 par le navigateur, GitHub Pages héberge les fichiers statiques, Google Drive
 conserve les images et les sauvegardes transférées explicitement.
 
@@ -14,7 +15,8 @@ conserve les images et les sauvegardes transférées explicitement.
   commandes tactiles, export de disque et diagnostic implémentés.
 - Client Drive implémenté : liste paginée, téléchargements en flux,
   sauvegardes par transferts reprenables en blocs et restauration de PC.
-  Les appels authentifiés réels restent à vérifier avec un client OAuth Web.
+  La connexion OAuth a été confirmée par l'utilisateur. Les nouveaux transferts
+  d'installations Wine restent à vérifier avec les fichiers du Drive privé.
 - Aucun Windows ni jeu commercial inclus. Le disque de diagnostic est du code
   original et ne constitue pas une preuve de compatibilité de Gangsters 2.
 - L'interface n'a pas été vérifiée visuellement sur un Pixel 9a.
@@ -46,6 +48,53 @@ Le dossier Drive peut être choisi dans les réglages par son lien ou son ID.
 Il n'est pas nécessaire de rendre le dossier public.
 
 ## Installer et jouer
+
+### Jeux Windows avec Wine
+
+1. Ouvrir **l'espace Wine** puis **Tester Windows et la sauvegarde**. Le petit
+   programme Win32 original affiche `ECRITURE WINDOWS OK` et écrit sur C:.
+2. Choisir **Enregistrer et fermer**, puis relancer ce test : `PERSISTENCE OK`
+   doit apparaître. Une session neuve retrouve alors le fichier conservé.
+3. Créer un profil par installation, le sélectionner, puis choisir son ISO
+   local ou un ISO du dossier Drive privé. Ouvrir le profil, actualiser les
+   programmes et lancer le programme d'installation sur D:.
+4. Après installation, actualiser les programmes et lancer le jeu sur C:.
+   Le programme choisi est conservé et son dossier sert de répertoire courant.
+5. Enregistrer la partie dans le jeu, puis fermer le profil. **Sauvegarder sur
+   Drive** envoie les fichiers modifiés du système Wine (registre inclus) dans
+   une archive `.rwp`, puis publie un manifeste `.retroiso-wine.json`. Les fichiers
+   du système de base proviennent du même environnement Wine versionné.
+6. Sur l'autre appareil, restaurer le manifeste puis ouvrir le profil. L'ISO
+   est téléchargé depuis sa référence Drive ; un CD local est d'abord envoyé
+   lors de la sauvegarde. Les sauvegardes créent de nouvelles versions.
+
+Wine est téléchargé dans OPFS une fois (99 456 246 octets). Chaque profil monte
+son propre IDBFS avec un verrou exclusif par onglet. Les fichiers modifiés sont
+copiés dans IndexedDB toutes les cinq secondes. La fermeture termine les
+programmes Wine, attend wineserver, copie les fichiers puis détruit le moteur.
+En cas d'échec d'enregistrement, la session reste ouverte et l'erreur est affichée.
+La RAM n'est pas sauvegardée : le jeu se relance depuis son installation.
+Les dernières écritures peuvent être perdues si l'onglet est tué avant copie.
+
+Les CD ISO 9660 / Joliet sont extraits par blocs de 4 Mio dans un lecteur D:
+en lecture seule. Ce lecteur ne reproduit pas les secteurs physiques, les
+pistes audio ou toutes les protections CD. UDF seul, BIN/CUE et les fichiers
+multi-extents ne sont pas pris en charge. Wine vise les programmes Windows x86 ;
+les ISO de consoles nécessitent un moteur distinct. OpenGL est proposé comme
+autre rendu, GDI comme premier essai 2D. Aucun succès de jeu sur Pixel n'est
+déduit du diagnostic Windows. La mémoire nécessaire au moteur et à un CD de
+500 Mo peut dépasser 1 Go ; les performances restent à mesurer sur le téléphone.
+
+Le build 87 de Boxedwine et le système Wine 11 web v14 sont verrouillés par
+SHA-256 dans `scripts/build-wine.mjs`. Les archives sont téléchargées pendant
+le build et servies avec le site, pas committées dans le dépôt. Les licences,
+sources et empreintes sont publiées avec le site. Le job `browser-smoke.mjs`
+exécute le véritable moteur dans Chromium avec OPFS et IndexedDB, vérifie le
+fichier Windows puis sa conservation après fermeture et rechargement. Les
+captures et le résultat sont conservés dans l'artefact `browser-verification`.
+Ce test de navigateur s'exécute uniquement sur GitHub Actions.
+
+### PC v86 avec une image de système
 
 1. Cliquer sur **Tester le moteur sans Windows** pour vérifier l'exécution.
    Appuyer sur Entrée pour écrire le marqueur, puis sur Échap pour redémarrer :

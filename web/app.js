@@ -27,7 +27,7 @@ function download(source, name) {
   link.href = url; link.download = name; link.click(); setTimeout(() => URL.revokeObjectURL(url), 120000);
 }
 async function renderLibrary() {
-  library = await machines.list(); $('#library').replaceChildren(); $('#empty').hidden = library.length > 0;
+  library = (await machines.list()).filter(machine => machine.kind !== 'wine'); $('#library').replaceChildren(); $('#empty').hidden = library.length > 0;
   for (const machine of library) {
     const card = document.createElement('article'); card.className = 'machine';
     const icon = document.createElement('div'); icon.className = 'machine-icon'; icon.textContent = machine.demo ? '⌘' : '▣';
