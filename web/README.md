@@ -159,3 +159,8 @@ npm test
 Servir `web/dist` en HTTPS (ou localhost). Ne pas ouvrir `index.html` par
 `file://`. Les tests moteur se lancent sous Node après la construction.
 Les images Windows et les données personnelles ne vont jamais dans Git.
+
+Le runtime Wine compact ne fournit pas Mono (.NET) ni Gecko (HTML). Leurs
+installations automatiques sont désactivées pour éviter une fenêtre de téléchargement
+bloquant le premier démarrage. Les jeux Windows x86 natifs restent la cible de cette
+version ; les logiciels dépendant de ces composants demandent un runtime distinct.

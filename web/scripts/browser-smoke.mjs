@@ -6,6 +6,8 @@ import {PNG} from 'pngjs';
 if (!process.env.CI) throw new Error('This browser verification runs on CI.');
 const server = spawn('python3', ['-m', 'http.server', '4173', '--bind', '127.0.0.1', '--directory', 'dist'], {stdio: 'ignore'});
 let browser; const diagnostic = [];
+const watchdog = setTimeout(() => { console.error('Browser verification exceeded 12 minutes'); server.kill(); process.exit(1); }, 12 * 60 * 1000);
+const bounded = (operation, timeout = 10000) => Promise.race([operation, new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Diagnostic timeout')), timeout); timer.unref(); })]);
 let rejectBrowserError; const browserError = new Promise((resolve, reject) => { rejectBrowserError = reject; }); browserError.catch(() => {});
 await mkdir('browser-results', {recursive: true});
 try {
@@ -15,6 +17,7 @@ try {
   }
   browser = await chromium.launch({args: ['--enable-unsafe-swiftshader']});
   const context = await browser.newContext({viewport: {width: 430, height: 930}}), page = await context.newPage();
+  context.setDefaultTimeout(30000);
   // OAuth is verified separately by the user's signed-in session.
   await page.route('https://accounts.google.com/**', route => route.fulfill({status: 200, contentType: 'text/javascript', body: ''}));
   page.on('console', message => { if (message.type() === 'error') diagnostic.push(message.text()); });
@@ -73,23 +76,25 @@ try {
   await writeFile('browser-results/result.json', JSON.stringify({windowsFileWrite: true, registryPersisted: true, coldRestart: true, nonBlackScreenPixels: litPixels, canvas: pixels, testedBrowser: await browser.version(), mobileViewport: true, pixel9aHardwareTest: false}, null, 2));
   console.log('REAL WINDOWS WRITE AND COLD RESTART: PASS');
 } catch (error) {
+  console.error('WINDOWS VERIFICATION FAILED: ' + error.stack);
+  await writeFile('browser-results/errors.txt', String(error.stack));
   if (browser) {
     const page = browser.contexts()[0]?.pages()[0];
     if (page) {
-      await page.screenshot({path: 'browser-results/failure.png', fullPage: true}).catch(() => {});
+      await page.screenshot({path: 'browser-results/failure.png', fullPage: true, timeout: 10000}).catch(() => {});
       diagnostic.push(await page.locator('#status').textContent().catch(() => ''));
       diagnostic.push(await page.locator('#engine-status').textContent().catch(() => ''));
       diagnostic.push(await page.locator('#logs').textContent().catch(() => ''));
       const engine = page.frames().find(item => item.url().endsWith('/wine-frame.html'));
-      if (engine) { await engine.locator('#boxedwine-webgl-canvas-0').screenshot({path: 'browser-results/failure-windows.png'}).catch(() => {}); }
-      if (engine) diagnostic.push(await engine.evaluate(() => {
+      if (engine) { await engine.locator('#boxedwine-webgl-canvas-0').screenshot({path: 'browser-results/failure-windows.png', timeout: 10000}).catch(() => {}); }
+      if (engine) diagnostic.push(await bounded(engine.evaluate(() => {
         if (!globalThis.FS) return 'No runtime filesystem';
         return JSON.stringify(Object.fromEntries(['job.id', 'ack', 'result', 'registry.log', 'program.log', 'stop', 'stopped'].map(name => {
           try { return [name, FS.readFile('/control/' + name, {encoding: 'utf8'}).slice(-12000)]; } catch (error) { return [name, error.message]; }
         })), null, 2);
-      }).catch(error => error.message));
+      })).catch(error => error.message));
     }
   }
   await writeFile('browser-results/errors.txt', diagnostic.join('\n'));
   console.error(diagnostic.join('\n').slice(-24000)); throw error;
-} finally { await browser?.close(); server.kill(); }
+} finally { clearTimeout(watchdog); await bounded(browser?.close()).catch(() => {}); server.kill(); }
