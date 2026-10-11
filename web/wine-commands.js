@@ -3,20 +3,25 @@ export const ROOT_BASE = '/retro-wine';
 export const DAEMON = `#!/bin/sh
 export WINEPREFIX=/home/username/.wine
 export WINELOADERNOEXEC=1
+last_job=
 while :; do
-  if [ -f /mnt/control/stop ]; then
+  read -r stop </home/username/retroiso-control/stop
+  if [ "$stop" = stop ]; then
     if [ -n "$job_pid" ]; then kill "$job_pid" 2>/dev/null; fi
     /opt/wine/bin/wineserver -k
     /opt/wine/bin/wineserver -w
-    echo STOPPED >/mnt/control/stopped
+    echo STOPPED >/home/username/retroiso-control/stopped
     exit 0
   fi
-  if [ -f /mnt/control/job.sh ]; then
-    mv /mnt/control/job.sh /mnt/control/current.sh
-    /bin/sh /mnt/control/current.sh &
+  read -r job </home/username/retroiso-control/job.id
+  if [ -n "$job" ] && [ "$job" != "$last_job" ]; then
+    cp /home/username/retroiso-control/job.sh /home/username/retroiso-control/current.sh
+    /bin/sh /home/username/retroiso-control/current.sh &
     job_pid=$!
+    last_job=$job
+    echo "$job" >/home/username/retroiso-control/ack
   fi
-  /bin/sleep 0.2
+  /bin/sleep 0.02
 done
 `;
 export const quote = value => "'" + String(value).replace(/'/g, "'\\''") + "'";
@@ -32,5 +37,5 @@ export function jobScript(program, renderer = 'gdi') {
   const path = /^[CD]:\\/i.test(program) ? program.slice(3).replace(/\\/g, '/') : '';
   const directory = path.slice(0, Math.max(path.lastIndexOf('/'), 0));
   const working = /^[D]:/i.test(program) ? '/mnt/drive_d' : '/home/username/.wine/drive_c';
-  return `#!/bin/sh\n/bin/wine reg add 'HKCU\\Software\\Wine\\Direct3D' /v DirectDrawRenderer /d ${renderer} /f >/mnt/control/registry.log 2>&1\n/bin/wine reg add 'HKLM\\Software\\Wine\\Drives' /v 'd:' /d cdrom /f >>/mnt/control/registry.log 2>&1\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\n/bin/wine ${args.map(quote).join(' ')} >/mnt/control/program.log 2>&1\necho $? >/mnt/control/result\n`;
+  return `#!/bin/sh\n/bin/wine reg add 'HKCU\\Software\\Wine\\Direct3D' /v DirectDrawRenderer /d ${renderer} /f >/home/username/retroiso-control/registry.log 2>&1\n/bin/wine reg add 'HKLM\\Software\\Wine\\Drives' /v 'd:' /d cdrom /f >>/home/username/retroiso-control/registry.log 2>&1\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\n/bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
 }

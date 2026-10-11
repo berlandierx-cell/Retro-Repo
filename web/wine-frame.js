@@ -4,7 +4,7 @@ import {exportPrefix, importPrefix} from './wine-pack.js';
 import {DAEMON, ROOT_BASE, jobScript} from './wine-commands.js';
 const send = data => parent.postMessage({retroWine: true, ...data}, location.origin);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let config, prefix, initialized = false, timer, stopped = false, syncTail = Promise.resolve();
+let config, prefix, initialized = false, timer, stopped = false, jobId = 0, syncTail = Promise.resolve();
 const fs = () => globalThis.FS;
 const sync = populate => {
   const operation = syncTail.then(() => new Promise((resolve, reject) => fs().syncfs(populate, error => error ? reject(error) : resolve())));
@@ -13,8 +13,10 @@ const sync = populate => {
 function tell(stage, detail) { send({stage, detail}); }
 function queueJob(program) {
   if (stopped) throw new Error('Cette session est fermée. Relance le PC.');
-  if (fs().analyzePath('/control/job.sh').exists) throw new Error('Un lancement est déjà en attente.');
-  fs().writeFile('/control/job.tmp', jobScript(program, config.renderer)); fs().rename('/control/job.tmp', '/control/job.sh');
+  if (jobId && fs().readFile('/control/ack', {encoding: 'utf8'}).trim() !== String(jobId)) throw new Error('Un lancement est déjà en attente.');
+  // Fixed filenames are necessary: Boxedwine caches directory entries on first access.
+  fs().writeFile('/control/job.sh', jobScript(program, config.renderer));
+  fs().writeFile('/control/job.id', String(++jobId) + '\n');
 }
 async function prepare() {
   const FS = fs(); prefix = ROOT_BASE + '/' + config.id;
@@ -25,6 +27,7 @@ async function prepare() {
     send({imported: true});
   }
   FS.mkdirTree('/control'); FS.mkdirTree('/cdrom');
+  for (const name of ['stop', 'stopped', 'job.id', 'job.sh', 'ack', 'result', 'registry.log', 'program.log']) FS.writeFile('/control/' + name, '');
   FS.writeFile('/control/daemon.sh', DAEMON); FS.chmod('/control/daemon.sh', 0o755);
   const driveC = prefix + '/home/username/.wine/drive_c'; FS.mkdirTree(driveC);
   const test = await fetch('retroiso-test.exe'); if (!test.ok) throw new Error('Programme de test indisponible.');
@@ -59,9 +62,9 @@ async function stopGuest() {
   clearInterval(timer);
   if (!config.maintenance && !stopped) {
     tell('closing', 'Fermeture des programmes et enregistrement du registre…');
-    fs().writeFile('/control/stop', 'stop');
+    fs().writeFile('/control/stop', 'stop\n');
     const deadline = Date.now() + 90000;
-    while (!fs().analyzePath('/control/stopped').exists) {
+    while (!fs().readFile('/control/stopped', {encoding: 'utf8'}).includes('STOPPED')) {
       if (Date.now() > deadline) throw new Error('Wine ne s’est pas fermé. La session reste ouverte : réessaie Enregistrer et fermer.');
       await sleep(200);
     }
@@ -118,7 +121,7 @@ window.addEventListener('message', async event => {
       globalThis.Module = {
         noInitialRun: true, noExitRuntime: true, canvas: document.getElementById('canvas'),
         locateFile: name => new URL('vendor/boxedwine/' + name, location.href).href,
-        print: line => send({log: String(line)}), printErr: line => send({log: String(line)}),
+        print: line => { if (!String(line).startsWith('ran main loop')) send({log: String(line)}); }, printErr: line => send({log: String(line)}),
         onAbort: error => send({fatal: 'Moteur arrêté : ' + error}),
         preRun: [() => {
           globalThis.addRunDependency('retroiso-storage');
@@ -128,11 +131,11 @@ window.addEventListener('message', async event => {
           initialized = true; send({reply: message.request, result: true});
           if (!config.maintenance) {
             tell('starting', 'Wine démarre. Le premier lancement peut prendre plusieurs minutes.');
-            globalThis.callMain(['-root', prefix, '-zip', '/wine.zip', '-mount_drive', '/cdrom', 'd', '-mount', '/control', '/mnt/control', '-env', 'WINELOADERNOEXEC=1', '-env', 'WINEDEBUG=-all', '-resolution', '800x600', '/bin/sh', '/mnt/control/daemon.sh']);
+            globalThis.callMain(['-root', prefix, '-zip', '/wine.zip', '-mount_drive', '/cdrom', 'd', '-mount', '/control', '/home/username/retroiso-control', '-env', 'WINELOADERNOEXEC=1', '-env', 'WINEDEBUG=-all', '-resolution', '800x600', '/bin/sh', '/home/username/retroiso-control/daemon.sh']);
             timer = setInterval(() => {
               sync(false).catch(error => { globalThis.Module.pauseMainLoop?.(); send({fatal: 'Enregistrement local impossible : ' + error.message}); clearInterval(timer); });
               const marker = prefix + '/home/username/.wine/drive_c/retroiso-persistence.txt';
-              if (fs().analyzePath(marker).exists) send({proof: fs().readFile(marker, {encoding: 'utf8'})});
+              if (config.program === 'test' && fs().analyzePath(marker).exists) send({proof: fs().readFile(marker, {encoding: 'utf8'})});
             }, 5000);
           }
         },

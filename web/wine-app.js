@@ -83,7 +83,7 @@ window.addEventListener('message', async event => {
   }
   if (message.detail) $('#engine-status').textContent = message.detail;
   if (message.log) { const logs = $('#logs'); logs.textContent = (logs.textContent + message.log + '\n').slice(-24000); }
-  if (message.proof) { $('#engine-status').textContent = message.proof.includes('PERSISTENCE OK') ? 'Test Windows : PERSISTENCE OK. Le fichier a survécu à un redémarrage.' : 'Test Windows : écriture réussie. Ferme puis relance le test pour vérifier la conservation.'; }
+  if (message.proof) { $('#engine-status').textContent = message.proof.includes('PERSISTENCE OK') ? 'Test Windows : PERSISTENCE OK. Le programme a retrouvé le fichier existant.' : 'Test Windows : écriture réussie. Ferme puis relance le test pour vérifier la conservation.'; }
   if (message.fatal) {
     status(message.fatal); $('#engine-status').textContent = message.fatal;
     for (const item of pending.values()) { clearTimeout(item.timer); item.reject(new Error(message.fatal)); } pending.clear();
