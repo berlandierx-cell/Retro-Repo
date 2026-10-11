@@ -354,7 +354,11 @@ class EmbeddedWinlatorBackend(private val context: Context) {
      * automatiquement dérivé par Winlator à partir du chemin de l'exécutable.
      */
     fun launchGame(prepared: PreparedContainer) {
-        val exe = prepared.gameExecutable
+        // The confirmed working startup path reaches DirectDraw through
+        // Gangsters2.exe, not the alternate SpawnedVersion executable.
+        val exe = (if (prepared.containerName == "retroiso-gangsters-2")
+            findBaseGangstersExecutable(prepared) ?: prepared.gameExecutable
+        else prepared.gameExecutable)
             ?: throw IllegalStateException("Jeu installé introuvable dans le container.")
 
         if (prepared.patchExecutable != null && isPatchApplied(prepared)) {
