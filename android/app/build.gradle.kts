@@ -12,8 +12,8 @@ android {
         applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
-        versionCode = 7
-        versionName = "0.5.1-native-diagnostics"
+        versionCode = 8
+        versionName = "0.5.2-native-patch-preparation"
         ndk {
             abiFilters += "arm64-v8a"
         }

@@ -142,7 +142,8 @@ replacement = '''        ProcessHelper.removeAllDebugCallbacks();
         retroIsoDiagnostics = new com.elmagnifico.retroiso.runtime.winlator.RetroIsoDiagnostics(
             this, "EXE: " + getIntent().getStringExtra("exec_path") +
             "\\nChemin Windows: " + getIntent().getStringExtra("retroiso_dos_path") +
-            "\\nContainer: " + getIntent().getIntExtra("container_id", 0));
+            "\\nContainer: " + getIntent().getIntExtra("container_id", 0) +
+            "\\nPreparation: " + getIntent().getStringExtra("retroiso_preflight"));
         ProcessHelper.addDebugCallback((line) -> {
             retroIsoDiagnostics.append(line);
             synchronized (retroIsoBootLog) {

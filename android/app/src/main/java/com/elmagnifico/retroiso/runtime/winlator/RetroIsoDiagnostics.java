@@ -30,7 +30,7 @@ public final class RetroIsoDiagnostics {
             for (int i = 2; i < old.length; i++) old[i].delete();
         }
         file = new File(dir, System.currentTimeMillis() + "-" + System.nanoTime() + ".txt");
-        header = "Retro ISO 0.5.1\nDate: " + new java.util.Date() +
+        header = "Retro ISO 0.5.2\nDate: " + new java.util.Date() +
             "\nAndroid: " + android.os.Build.VERSION.SDK_INT +
             "\nAppareil: " + android.os.Build.MODEL + "\n" + launchInfo + "\n\n";
         flush();

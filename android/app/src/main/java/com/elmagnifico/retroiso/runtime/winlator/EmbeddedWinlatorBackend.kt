@@ -197,6 +197,12 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             exe.path.startsWith(root.canonicalPath + File.separator)
         }) { "Ce programme ne se trouve plus dans les dossiers de ce jeu." }
 
+        // Manual selection must keep the patch's required preparation.
+        if (isGangstersUpdater(prepared, program.file)) {
+            launchPatch(prepared.copy(patchExecutable = program.file))
+            return
+        }
+
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", false)
             .putInt("box64_logs", 0)
@@ -242,30 +248,68 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         return digest.digest().joinToString("") { "%02x".format(it) }
     }
 
+    private fun isGangstersUpdater(prepared: PreparedContainer, file: File): Boolean {
+        if (prepared.containerName != "retroiso-gangsters-2") return false
+        val patchRoot = File(prepared.cdDir.parentFile, "Patch").canonicalFile
+        val candidate = file.canonicalFile
+        if (!candidate.path.startsWith(patchRoot.path + File.separator)) return false
+        return candidate == prepared.patchExecutable?.canonicalFile ||
+            candidate.name.equals("Gangsters-2_Patch_Win_EN_Patch-107.exe", ignoreCase = true)
+    }
+
     fun launchPatch(prepared: PreparedContainer) {
         val patch = prepared.patchExecutable
             ?: throw IllegalStateException("Patch 1.0.7 introuvable dans le pack ajouté.")
+        require(patch.isFile) { "Le fichier du patch n'existe plus. Actualise les programmes." }
         val gameExe = findBaseGangstersExecutable(prepared)
-            ?: throw IllegalStateException("Gangsters2.exe introuvable avant application du patch.")
+            ?: throw IllegalStateException(
+                "Le patch attend Gangsters2.exe dans le jeu installé sur C:, mais ce fichier est introuvable. " +
+                "Aucune modification du registre n'a été faite. Utilise « Voir EXE / DLL » pour vérifier l'installation."
+            )
 
-        // The original Hothouse updater does not discover the install path by
-        // scanning Program Files. Its own code reads:
-        // HKLM\\Software\\Gangsters2g -> PATH / VERSION.
-        // Old InstallShield/Wine setups may omit that legacy key, producing the
-        // misleading "Impossible de trouver Internet" updater error.
-        val driveC = File(prepared.rootDir, ".wine/drive_c")
-        val relativeGameDir = gameExe.parentFile.relativeTo(driveC).invariantSeparatorsPath
-        val windowsInstallDir = ("C:\\" + relativeGameDir.replace("/", "\\")).let {
-            if (it.endsWith("\\")) it else it + "\\"
-        }
+        val windowsInstallDir = programDosPath(prepared, gameExe).substringBeforeLast("\\") + "\\"
         val systemReg = File(prepared.rootDir, ".wine/system.reg")
+        require(systemReg.isFile) { "Registre Wine introuvable pour cette installation." }
+        val stateDir = patchStateDir(prepared)
+        val registryBackup = File(stateDir, "system-before-path-repair.reg")
+        if (!registryBackup.exists()) systemReg.copyTo(registryBackup)
+
+        // WineRegistryEditor edits the on-disk registry directly: there is no
+        // automatic WOW64 redirection. Populate both views, preserving VERSION.
+        val logicalKeys = listOf("Software\\Gangsters2g", "Software\\Wow6432Node\\Gangsters2g")
+        // The file editor matches text, whereas Windows registry keys are case-insensitive.
+        // Reuse existing spelling and repair any old duplicate instead of shadowing it.
+        val existingKeys = systemReg.useLines { lines ->
+            lines.filter { it.startsWith("[") && it.contains("]") }
+                .map { it.substring(1, it.indexOf("]")).replace("\\\\", "\\") }
+                .toList()
+        }
+        val patchKeys = logicalKeys.flatMap { key ->
+            existingKeys.filter { it.equals(key, ignoreCase = true) }.ifEmpty { listOf(key) }
+        }.distinct()
         WineRegistryEditor(systemReg).use { registry ->
-            registry.setStringValue("Software\\Gangsters2g", "PATH", windowsInstallDir)
-            // Preserve VERSION if the official updater already wrote it.
+            patchKeys.forEach { key -> registry.setStringValue(key, "PATH", windowsInstallDir) }
+        }
+        WineRegistryEditor(systemReg).use { registry ->
+            patchKeys.forEach { key ->
+                check(registry.getStringValue(key, "PATH") == windowsInstallDir) {
+                    "Le chemin du jeu n'a pas pu être enregistré pour le patch : " + key
+                }
+            }
         }
 
-        val stateDir = patchStateDir(prepared)
-        File(stateDir, "prepatch.sha256").writeText(sha256(gameExe))
+        val gameHash = sha256(gameExe)
+        File(stateDir, "prepatch.sha256").writeText(gameHash)
+        val preparation = listOf(
+            "PATCH_PREPARATION: OK",
+            "Patch choisi: " + patch.name,
+            "Jeu cible: " + programDosPath(prepared, gameExe),
+            "Taille EXE cible: " + gameExe.length(),
+            "SHA256 avant patch: " + gameHash,
+            "PATH 64 bits verifie: " + windowsInstallDir,
+            "PATH 32 bits verifie: " + windowsInstallDir,
+            "VERSION: conservee, non forcee par Retro ISO"
+        ).joinToString("\n")
 
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", false)
@@ -276,6 +320,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", patch.absolutePath)
             putExtra("retroiso_dos_path", programDosPath(prepared, patch))
+            putExtra("retroiso_preflight", preparation)
             putExtra("retroiso_auto_exit", true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
