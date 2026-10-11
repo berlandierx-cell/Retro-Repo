@@ -12,8 +12,8 @@ android {
         applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
-        versionCode = 4
-        versionName = "0.4-native-setup"
+        versionCode = 5
+        versionName = "0.4.1-native-autorun"
         ndk {
             abiFilters += "arm64-v8a"
         }

@@ -57,10 +57,10 @@ jobs:
           cat > /tmp/retroiso-release-notes.md <<'NOTES'
           APK Android avec Winlator/Wine/Box64 intégré.
           
-          - Gangsters 2 : lancement direct de Setup.exe.
+          - Gangsters 2 : installation via Autorun.exe.
           - Traces détaillées Wine/Box64 désactivées pour l'installation.
           - Import ISO via le sélecteur Android, notamment Google Drive.
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.4 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.4.1 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease

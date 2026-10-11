@@ -133,7 +133,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     /**
-     * Lance directement l'installeur indiqué par le profil (Setup.exe pour Gangsters 2).
+     * Lance directement l'installeur indiqué par le profil (Autorun.exe pour Gangsters 2).
      * Comme X: pointe vers le même CD extrait et est typé CD-ROM,
      * Wine voit immédiatement le média au démarrage de l'installeur.
      */
