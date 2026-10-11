@@ -47,11 +47,20 @@ try {
     return document.getElementById('engine-status').textContent.includes(expected);
   }, 'écriture réussie', {timeout: 360000}), browserError]);
   console.log('Windows file write: PASS');
+  // The PE writes its marker before calling MessageBoxA. Rendering can lag
+  // behind the filesystem proof while Wine loads user32/theme/font resources.
+  let screen, litPixels = 0;
+  const renderDeadline = Date.now() + 90000;
+  while (Date.now() < renderDeadline) {
+    screen = await Promise.race([page.locator('#frame-host').screenshot({timeout: 10000}), browserError]);
+    const png = PNG.sync.read(screen); litPixels = 0;
+    for (let i = 0; i < png.data.length; i += 4) if (png.data[i] + png.data[i + 1] + png.data[i + 2] > 45) litPixels++;
+    if (litPixels >= 500) break;
+    await Promise.race([new Promise(resolve => setTimeout(resolve, 500)), browserError]);
+  }
+  await writeFile('browser-results/windows-screen.png', screen);
   await page.screenshot({path: 'browser-results/first-launch.png', fullPage: true});
-  const screen = await page.locator('#frame-host').screenshot({path: 'browser-results/windows-screen.png'});
-  const png = PNG.sync.read(screen); let litPixels = 0;
-  for (let i = 0; i < png.data.length; i += 4) if (png.data[i] + png.data[i + 1] + png.data[i + 2] > 45) litPixels++;
-  if (litPixels < 500) throw new Error('Windows wrote the file but its screen is black');
+  if (litPixels < 500) throw new Error('Windows wrote the file but no visible frame arrived within 90 seconds');
   console.log('Visible Windows screen: PASS, pixels=' + litPixels);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   if (overflow) throw new Error('Wine page overflows the mobile viewport');
