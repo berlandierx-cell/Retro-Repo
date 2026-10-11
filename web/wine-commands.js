@@ -7,8 +7,9 @@ last_job=
 while :; do
   read -r stop </home/username/retroiso-control/stop
   if [ "$stop" = stop ]; then
-    # Let the launcher reap Wine normally; SIGTERM of BusyBox ash faults in this runtime.
-    /opt/wine/bin/wineserver -k
+    # End the Windows session before waiting for the server to flush its registry.
+    WINEDLLOVERRIDES='mscoree,mshtml=' /bin/wine wineboot -e -f -k -s >/home/username/retroiso-control/registry.log 2>&1
+    if [ $? -ne 0 ]; then echo CLOSE_FAILED >/home/username/retroiso-control/stopped; exit 1; fi
     /opt/wine/bin/wineserver -w
     if [ -n "$job_pid" ]; then wait "$job_pid"; fi
     echo STOPPED >/home/username/retroiso-control/stopped

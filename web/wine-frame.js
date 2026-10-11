@@ -104,6 +104,7 @@ async function stopGuest() {
     fs().writeFile('/control/stop', 'stop\n');
     const deadline = Date.now() + 90000;
     while (!fs().readFile('/control/stopped', {encoding: 'utf8'}).includes('STOPPED')) {
+      if (fs().readFile('/control/stopped', {encoding: 'utf8'}).includes('CLOSE_FAILED')) throw new Error('Wine a refusé la fermeture. Consulte le diagnostic.');
       if (Date.now() > deadline) throw new Error('Wine ne s’est pas fermé. La session reste ouverte : réessaie Enregistrer et fermer.');
       await sleep(200);
     }

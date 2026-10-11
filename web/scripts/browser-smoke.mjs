@@ -49,18 +49,22 @@ try {
   console.log('Windows file write: PASS');
   // The PE writes its marker before calling MessageBoxA. Rendering can lag
   // behind the filesystem proof while Wine loads user32/theme/font resources.
-  let screen, litPixels = 0;
+  let screen, litPixels = 0, windowPixels = 0;
   const renderDeadline = Date.now() + 90000;
   while (Date.now() < renderDeadline) {
     screen = await Promise.race([page.locator('#frame-host').screenshot({timeout: 10000}), browserError]);
-    const png = PNG.sync.read(screen); litPixels = 0;
-    for (let i = 0; i < png.data.length; i += 4) if (png.data[i] + png.data[i + 1] + png.data[i + 2] > 45) litPixels++;
-    if (litPixels >= 500) break;
+    const png = PNG.sync.read(screen); litPixels = 0; windowPixels = 0;
+    for (let i = 0; i < png.data.length; i += 4) {
+      const [r, g, b] = png.data.subarray(i, i + 3);
+      if (r + g + b > 45) litPixels++;
+      if (r > 150 && g > 150 && b > 150 && Math.max(r,g,b) - Math.min(r,g,b) < 25) windowPixels++;
+    }
+    if (litPixels >= 500 && windowPixels >= 500) break;
     await Promise.race([new Promise(resolve => setTimeout(resolve, 500)), browserError]);
   }
   await writeFile('browser-results/windows-screen.png', screen);
   await page.screenshot({path: 'browser-results/first-launch.png', fullPage: true});
-  if (litPixels < 500) throw new Error('Windows wrote the file but no visible frame arrived within 90 seconds');
+  if (litPixels < 500 || windowPixels < 500) throw new Error('Windows wrote the file but no visible Windows dialog arrived within 90 seconds');
   console.log('Visible Windows screen: PASS, pixels=' + litPixels);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   if (overflow) throw new Error('Wine page overflows the mobile viewport');
@@ -101,7 +105,7 @@ try {
   await page.screenshot({path: 'browser-results/cold-restart.png', fullPage: true});
   await page.locator('#close').click(); await Promise.race([page.locator('#player').waitFor({state: 'hidden', timeout: 120000}), browserError]);
   if (diagnostic.length) throw new Error('Browser errors: ' + diagnostic.join('\n'));
-  await writeFile('browser-results/result.json', JSON.stringify({windowsFileWrite: true, registryPersisted: true, coldRestart: true, nonBlackScreenPixels: litPixels, canvas: pixels, testedBrowser: await browser.version(), mobileViewport: true, pixel9aHardwareTest: false}, null, 2));
+  await writeFile('browser-results/result.json', JSON.stringify({windowsFileWrite: true, registryPersisted: true, coldRestart: true, nonBlackScreenPixels: litPixels, windowPixels, canvas: pixels, testedBrowser: await browser.version(), mobileViewport: true, pixel9aHardwareTest: false}, null, 2));
   console.log('REAL WINDOWS WRITE AND COLD RESTART: PASS');
 } catch (error) {
   console.error('WINDOWS VERIFICATION FAILED: ' + error.stack);
