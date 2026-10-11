@@ -1,0 +1,86 @@
+name: Publish Wine for requested manual test
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/wine-manual-preview.yml']
+  workflow_dispatch:
+
+concurrency:
+  group: retroiso-web-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: web/.cache/wine
+          key: retroiso-wine-v14-build87
+      - name: Build checksum-verified engines
+        run: npm run build
+      - name: Verify engines and storage
+        run: npm test
+      # The regular web.yml still requires its full Chromium check.
+      # This workflow publishes an explicitly experimental manual test
+      # requested by the owner, not a browser-verified release.
+      - name: Label manual preview and expose diagnostics
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFile, writeFile} from 'node:fs/promises';
+          const page = 'dist/wine.html';
+          let html = await readFile(page, 'utf8');
+          if (!html.includes('<main>') || !html.includes('<summary>Diagnostic</summary>')) {
+            throw new Error('Manual preview markup changed; refusing unlabelled publication.');
+          }
+          html = html.replace('<main>', '<main><section class="wine-panel" role="note"><h2>Essai manuel — version expérimentale</h2><p>Le test automatique Windows a dépassé sa limite de temps. Cette page permet de tester manuellement le bureau et le programme Windows sur votre appareil. Le lancement des jeux et la sauvegarde Wine ne sont pas encore validés. Commencez par un nouveau profil de test.</p></section>');
+          html = html.replace('<details><summary>Diagnostic</summary>', '<details open><summary>Diagnostic</summary>');
+          await writeFile(page, html);
+          await writeFile('dist/manual-preview.json', JSON.stringify({
+            manualPreview: true,
+            commit: process.env.GITHUB_SHA,
+            browserVerified: false,
+            previousBrowserRun: 'https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38142633220',
+            reason: 'Windows browser check exceeded 12 minutes',
+            created: new Date().toISOString()
+          }, null, 2));
+          NODE
+          echo '### Manual Wine preview' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Build and storage tests are required. Windows launch and Wine persistence remain unverified; the normal release browser gate is unchanged.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retroiso-manual-preview
+          path: web/dist
+          include-hidden-files: true
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - name: Publish explicitly experimental manual test
+        id: deployment
+        uses: actions/deploy-pages@v4
