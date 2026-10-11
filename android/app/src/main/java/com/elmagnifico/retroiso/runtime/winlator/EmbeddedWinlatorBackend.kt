@@ -7,6 +7,8 @@ import com.elmagnifico.retroiso.runtime.GameProfile
 import com.winlator.XServerDisplayActivity
 import com.winlator.container.Container
 import com.winlator.container.ContainerManager
+import com.winlator.container.DXWrappers
+import com.winlator.container.GraphicsDrivers
 import com.winlator.core.DefaultVersion
 import com.winlator.core.FileUtils
 import com.winlator.core.GeneralComponents
@@ -683,6 +685,18 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         profile: GameProfile
     ) = withContext(Dispatchers.IO) {
         container.drives = "D:" + gameDir.absolutePath
+
+        // Gangsters 2 is a DirectDraw game. On Mali devices (including Pixel 9a),
+        // the default Gladio OpenGL path may fail to load native libEGL.so.1,
+        // leaving WineD3D without an OpenGL context. Winlator's VirGL backend
+        // renders through the Android-side virglrenderer instead.
+        // Always apply this to existing containers too; no game files or Wine
+        // prefix are deleted and Winlator refreshes the driver on next launch.
+        if (profile.id == "gangsters-2") {
+            container.setGraphicsDriver(GraphicsDrivers.VORTEK + "," + GraphicsDrivers.VIRGL)
+            container.setDXWrapper(DXWrappers.WINED3D)
+            container.setDXWrapperConfig("")
+        }
 
         // Laisse Winlator créer les dosdevices standards.
         WineUtils.createDosdevicesSymlinks(container, true)
