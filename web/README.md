@@ -10,23 +10,28 @@ conserve les images et les sauvegardes transférées explicitement.
 
 ### Diagnostic Wine du 11 octobre 2026
 
-Le lancement Windows et la sauvegarde Wine ne sont pas validés. Le bureau seul
-et le programme Win32 de test reproduisent un crash du backend JIT build 87 :
-`KMemory::commitPreparedCodeInvalidation nextOp->blockStart` (puis
-`nested code invalidation preparation`). Un essai interactif a également affiché
-`Error — pf`. Le crash ne dépend pas d'un ISO de Gangsters 2.
+Le test réel dans Chromium a réussi : fenêtre Win32 affichée, fichier écrit
+par les API Windows, fermeture de session, registre écrit par le programme
+conservé dans IndexedDB, puis fichier retrouvé après rechargement complet.
 
-- JIT normal : échec confirmé, run [38144713367](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38144713367).
-- Interpréteur de la même archive : aucun crash identique observé pendant les six minutes du test, mais expiration du délai avant l'écriture Windows ; la fenêtre Wine apparaît vers 320 secondes, run [38144992260](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38144992260). Cet essai ne prouve pas que le démarrage finirait par réussir.
-- JIT avec `-disableWasmJitForWrittenCode` : même crash, run [38145558830](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38145558830).
+Preuve : run [38147192712](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38147192712),
+commit `842d53784b0915870d6d6e5f9a9a26e7011082c2`. Les captures, le registre de
+test et le résultat JSON sont dans l’artefact `browser-verification`.
+Les 21 tests automatiques passent également. Le viewport mobile est testé
+dans Chromium sur Linux ; cela ne valide pas encore le matériel Pixel 9a.
 
-Les variantes expérimentales n'ont pas été publiées par le workflow normal.
-La page d'essai manuel publiée précédemment reste expérimentale et utilise le
-JIT normal. Les alertes du moteur sont désormais enregistrées par le test
-Chromium ; les diagnostics sont conservés même si le délai global expire.
-Les deux contournements inefficaces sont retirés du code actif ; leur historique
-reste disponible. Il faut corriger ou remplacer le backend avant de déclarer
-le lancement Windows, la persistance Wine ou le jeu fonctionnels.
+Deux corrections débloquent le runtime épinglé :
+- Le système Wine fourni est déjà initialisé. Le marqueur
+  `.update-timestamp=disable` empêche une réinstallation inutile des DLL au
+  démarrage, qui déclenchait le crash JIT.
+- La fermeture passe par `wineboot -e -f -k -s`, puis attend le serveur.
+  L’arrêt direct du serveur perdait les dernières modifications du registre ;
+  le signal envoyé au lanceur shell provoquait aussi un crash.
+
+Le contrôle visuel attend les pixels de la fenêtre, au-delà du simple fond
+bleu du bureau. Les erreurs natives du moteur sont enregistrées et font échouer
+la vérification. Gangsters 2, ses performances sur Pixel et les transferts
+réels des installations Wine vers Drive restent à valider.
 
 ### Autres contrôles et fonctionnalités
 
