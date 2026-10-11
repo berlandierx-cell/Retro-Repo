@@ -12,8 +12,8 @@ android {
         applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
-        versionCode = 9
-        versionName = "0.5.3-native-patch-key"
+        versionCode = 10
+        versionName = "0.5.4-virgl-directdraw"
         ndk {
             abiFilters += "arm64-v8a"
         }
