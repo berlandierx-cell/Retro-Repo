@@ -217,6 +217,10 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", program.file.absolutePath)
             putExtra("retroiso_dos_path", programDosPath(prepared, program.file))
+            putExtra("retroiso_touch_controls",
+                prepared.containerName == "retroiso-gangsters-2" &&
+                    (program.file.name.equals("Gangsters2.exe", ignoreCase = true) ||
+                     program.file.name.equals("Gangsters2SpawnedVersion.exe", ignoreCase = true)))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         })
     }
@@ -374,6 +378,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", exe.absolutePath)
             putExtra("retroiso_dos_path", programDosPath(prepared, exe))
+            putExtra("retroiso_touch_controls", prepared.containerName == "retroiso-gangsters-2")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
