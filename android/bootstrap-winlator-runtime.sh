@@ -391,4 +391,28 @@ if old not in ps:
 ph.write_text(ps.replace(old, new, 1))
 PY
 
+# Attach the optional Android on-screen controls after the existing Winlator UI
+# is assembled. Their Java implementation lives in Retro ISO source and is
+# compiled together with the pinned upstream runtime.
+python3 - "$RUNTIME_DIR/app/src/main/java/com/winlator/XServerDisplayActivity.java" <<'PY'
+from pathlib import Path
+import sys
+
+p = Path(sys.argv[1])
+s = p.read_text()
+old = '''        if (MainActivity.DEBUG_MODE) rootView.addView(AppUtils.createDebugMsgTextView(this));
+        AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);'''
+new = '''        if (MainActivity.DEBUG_MODE) rootView.addView(AppUtils.createDebugMsgTextView(this));
+        // Retro ISO's optional game-specific overlay must be on top of
+        // TouchpadView and InputControlsView to receive accurate tap positions.
+        if (getIntent().getBooleanExtra("retroiso_touch_controls", false)) {
+            new com.elmagnifico.retroiso.runtime.winlator.RetroIsoControlsOverlay(
+                this, rootView, xServer, xServerView, touchpadView);
+        }
+        AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);'''
+if s.count(old) != 1:
+    raise SystemExit("Retro ISO touch controls patch point not found")
+p.write_text(s.replace(old, new, 1))
+PY
+
 echo "Winlator sources prepared at $RUNTIME_DIR ($PIN) with Retro ISO diagnostics"
