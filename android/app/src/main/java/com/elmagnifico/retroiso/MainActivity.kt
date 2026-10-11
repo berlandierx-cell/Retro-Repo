@@ -123,7 +123,12 @@ fun App(store: GameStore) {
                 }
                 val plan = runtime.prepare(game, store.gameDir(game))
                 val prepared = embedded.prepare(game, store.gameDir(game), plan.profile)
-                if (prepared.gameExecutable != null && prepared.patchExecutable != null) {
+                // The 1.0.7 Hothouse updater can fail even when the base game is
+                // fully installed. Do not make the Play action depend on this
+                // optional patch: keep manual patch launching available.
+                if (plan.profile.id == "gangsters-2" && prepared.gameExecutable != null) {
+                    embedded.launchGame(prepared)
+                } else if (prepared.gameExecutable != null && prepared.patchExecutable != null) {
                     if (embedded.isPatchApplied(prepared)) {
                         embedded.launchGame(prepared)
                     } else if (embedded.canApplyGangstersPatch(prepared)) {
