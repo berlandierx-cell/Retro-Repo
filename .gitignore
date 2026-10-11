@@ -1,0 +1,8 @@
+web/node_modules/
+web/dist/
+android/.runtime/
+android/.gradle/
+android/**/build/
+*.keystore
+client_secret.json
+token.json
