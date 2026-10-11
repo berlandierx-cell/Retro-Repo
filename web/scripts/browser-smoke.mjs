@@ -71,7 +71,7 @@ try {
     return {width: canvas.width, height: canvas.height, initialized: !!Module.__boxedwineInputHandlersInstalled};
   });
   if (!pixels.initialized || !pixels.width || !pixels.height) throw new Error('Real graphical input/canvas was not initialized');
-  await page.locator('#close').click(); await page.locator('#player').waitFor({state: 'hidden', timeout: 120000});
+  await page.locator('#close').click(); await Promise.race([page.locator('#player').waitFor({state: 'hidden', timeout: 120000}), browserError]);
   const registry = await page.evaluate(async () => {
     const {machines} = await import('./storage.js');
     const machine = (await machines.list()).find(item => item.kind === 'wine' && item.diagnostic);
@@ -89,6 +89,8 @@ try {
       };
     });
   });
+  await writeFile('browser-results/registry-after-close.reg', registry);
+  console.log('Registry verification: bytes=' + registry.length + ', renderer=' + registry.includes('"DirectDrawRenderer"="gdi"') + ', marker=' + registry.includes('"PersistenceMarker"="Windows-registry-write"'));
   if (!registry.includes('"DirectDrawRenderer"="gdi"') || !registry.includes('"PersistenceMarker"="Windows-registry-write"')) throw new Error('Wine registry was not saved at shutdown');
   console.log('Wine registry persisted on close: PASS');
   await page.reload(); await page.locator('#status').filter({hasText: 'Prêt.'}).waitFor();
@@ -97,7 +99,7 @@ try {
     return document.getElementById('engine-status').textContent.includes(expected);
   }, 'PERSISTENCE OK', {timeout: 360000}), browserError]);
   await page.screenshot({path: 'browser-results/cold-restart.png', fullPage: true});
-  await page.locator('#close').click(); await page.locator('#player').waitFor({state: 'hidden', timeout: 120000});
+  await page.locator('#close').click(); await Promise.race([page.locator('#player').waitFor({state: 'hidden', timeout: 120000}), browserError]);
   if (diagnostic.length) throw new Error('Browser errors: ' + diagnostic.join('\n'));
   await writeFile('browser-results/result.json', JSON.stringify({windowsFileWrite: true, registryPersisted: true, coldRestart: true, nonBlackScreenPixels: litPixels, canvas: pixels, testedBrowser: await browser.version(), mobileViewport: true, pixel9aHardwareTest: false}, null, 2));
   console.log('REAL WINDOWS WRITE AND COLD RESTART: PASS');
