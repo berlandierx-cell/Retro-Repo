@@ -45,6 +45,10 @@ async function prepare() {
   FS.writeFile('/control/daemon.sh', DAEMON); FS.chmod('/control/daemon.sh', 0o755);
   if (!config.maintenance) {
     const winePrefix = prefix + '/home/username/.wine'; FS.mkdirTree(winePrefix);
+    // The pinned web archive already contains a wineboot-initialized prefix.
+    // ZIP/host timestamps differ: avoid re-running its DLL installation on boot.
+    // Wine's documented-in-source timestamp sentinel applies to this fixed runtime.
+    FS.writeFile(winePrefix + '/.update-timestamp', 'disable\n');
     for (const [name, section, key, value] of [
       ['user.reg', 'Software\\Wine\\Direct3D', 'DirectDrawRenderer', config.renderer || 'gdi'],
       ['system.reg', 'Software\\Wine\\Drives', 'd:', 'cdrom'],
