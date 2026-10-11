@@ -8,6 +8,28 @@ conserve les images et les sauvegardes transférées explicitement.
 
 ## État réel
 
+### Diagnostic Wine du 11 octobre 2026
+
+Le lancement Windows et la sauvegarde Wine ne sont pas validés. Le bureau seul
+et le programme Win32 de test reproduisent un crash du backend JIT build 87 :
+`KMemory::commitPreparedCodeInvalidation nextOp->blockStart` (puis
+`nested code invalidation preparation`). Un essai interactif a également affiché
+`Error — pf`. Le crash ne dépend pas d'un ISO de Gangsters 2.
+
+- JIT normal : échec confirmé, run [38144713367](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38144713367).
+- Interpréteur de la même archive : aucun crash identique observé pendant les six minutes du test, mais expiration du délai avant l'écriture Windows ; la fenêtre Wine apparaît vers 320 secondes, run [38144992260](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38144992260). Cet essai ne prouve pas que le démarrage finirait par réussir.
+- JIT avec `-disableWasmJitForWrittenCode` : même crash, run [38145558830](https://github.com/berlandierx-cell/Retro-Repo/actions/runs/38145558830).
+
+Les variantes expérimentales n'ont pas été publiées par le workflow normal.
+La page d'essai manuel publiée précédemment reste expérimentale et utilise le
+JIT normal. Les alertes du moteur sont désormais enregistrées par le test
+Chromium ; les diagnostics sont conservés même si le délai global expire.
+Les deux contournements inefficaces sont retirés du code actif ; leur historique
+reste disponible. Il faut corriger ou remplacer le backend avant de déclarer
+le lancement Windows, la persistance Wine ou le jeu fonctionnels.
+
+### Autres contrôles et fonctionnalités
+
 - Moteur intégré, démarrage d'un PC et clavier vérifiés par un test utilisant
   le véritable moteur WebAssembly et les BIOS fournis au site.
 - Écritures persistantes du disque vérifiées après un redémarrage complet.
