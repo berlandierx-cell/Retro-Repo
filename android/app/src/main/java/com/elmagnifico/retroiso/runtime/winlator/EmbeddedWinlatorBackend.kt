@@ -650,6 +650,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     ): Container {
         val manager = withContext(Dispatchers.IO) { ContainerManager(context) }
         val wantedName = "retroiso-" + profile.id
+        val desktopSize = if (profile.id == "gangsters-2") "800x600" else "1280x720"
 
         manager.containers.firstOrNull { it.name == wantedName }?.let {
             it.drives = "D:" + gameDir.absolutePath
@@ -663,7 +664,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             suspendCancellableCoroutine { continuation ->
                 val data = JSONObject()
                     .put("name", wantedName)
-                    .put("screenSize", "1280x720")
+                    .put("screenSize", desktopSize)
                     .put("envVars", Container.DEFAULT_ENV_VARS)
                     .put("wincomponents", Container.DEFAULT_WINCOMPONENTS)
                     .put("drives", "D:" + gameDir.absolutePath)
@@ -689,6 +690,14 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         profile: GameProfile
     ) = withContext(Dispatchers.IO) {
         container.drives = "D:" + gameDir.absolutePath
+
+        // Gangsters 2 renders its menu at 800x600. With a 1280x720
+        // Wine desktop, the game occupies only a portion of the viewport.
+        // This also updates previously created containers, while leaving
+        // every other game's display resolution unchanged.
+        if (profile.id == "gangsters-2") {
+            container.setScreenSize("800x600")
+        }
 
         // Gangsters 2 is a DirectDraw game. On Mali devices (including Pixel 9a),
         // the default Gladio OpenGL path may fail to load native libEGL.so.1,
