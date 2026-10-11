@@ -168,7 +168,8 @@ window.addEventListener('message', async event => {
           initialized = true; send({reply: message.request, result: true});
           if (!config.maintenance) {
             tell('starting', 'Wine démarre. Le premier lancement peut prendre plusieurs minutes.');
-            globalThis.callMain(['-root', prefix, '-zip', '/wine.zip', '-mount_drive', '/cdrom', 'd', '-mount', '/control', '/home/username/retroiso-control', '-env', 'WINELOADERNOEXEC=1', '-env', 'WINEDEBUG=-all', '-resolution', '800x600', '/bin/sh', '/home/username/retroiso-control/daemon.sh']);
+            // Keep acceleration for stable code; interpret code after its first modification.
+            globalThis.callMain(['-disableWasmJitForWrittenCode', '-root', prefix, '-zip', '/wine.zip', '-mount_drive', '/cdrom', 'd', '-mount', '/control', '/home/username/retroiso-control', '-env', 'WINELOADERNOEXEC=1', '-env', 'WINEDEBUG=-all', '-resolution', '800x600', '/bin/sh', '/home/username/retroiso-control/daemon.sh']);
             timer = setInterval(() => {
               checkpoint().catch(error => { globalThis.Module.pauseMainLoop?.(); send({fatal: 'Enregistrement local impossible : ' + errorText(error)}); clearInterval(timer); });
               const marker = prefix + '/home/username/.wine/drive_c/retroiso-persistence.txt';
