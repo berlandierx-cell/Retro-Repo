@@ -88,7 +88,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         }
     }
 
-    suspend fun prepare(game: Game, gameDir: File, profile: GameProfile): PreparedContainer {
+    suspend fun prepare(game: Game, gameDir: File, profile: GameProfile, requireInstaller: Boolean = true): PreparedContainer {
         val iso = File(gameDir, profile.cdRom.image)
         require(iso.isFile) { "ISO introuvable : " + iso.absolutePath }
 
@@ -98,7 +98,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val installerFile = File(cdDir, profile.installer).takeIf { it.isFile }
             ?: cdDir.listFiles()?.firstOrNull { it.isFile && it.name.equals(profile.installer, ignoreCase = true) }
             ?: File(cdDir, profile.installer)
-        require(installerFile.isFile) {
+        require(!requireInstaller || installerFile.isFile) {
             "Installeur introuvable : " + installerFile.absolutePath
         }
 
@@ -149,6 +149,62 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
+    }
+
+
+    data class Program(val dosPath: String, val file: File)
+
+    private fun programRoots(prepared: PreparedContainer): List<Pair<String, File>> = listOf(
+        "X:" to prepared.cdDir,
+        "C:" to File(prepared.rootDir, ".wine/drive_c"),
+        "D:\\Patch" to File(prepared.cdDir.parentFile, "Patch")
+    )
+
+    suspend fun listPrograms(prepared: PreparedContainer): List<Program> = withContext(Dispatchers.IO) {
+        programRoots(prepared).flatMap { (drive, source) ->
+            val root = source.canonicalFile
+            if (!root.isDirectory) return@flatMap emptyList<Program>()
+            val visited = mutableSetOf<String>()
+            source.walkTopDown()
+                .maxDepth(32)
+                .onEnter { dir ->
+                    val canonical = dir.canonicalFile
+                    val insideRoot = canonical == root || canonical.path.startsWith(root.path + File.separator)
+                    val systemFolder = drive == "C:" && dir.name.lowercase(Locale.ROOT) in
+                        setOf("windows", "system32", "syswow64")
+                    insideRoot && !systemFolder && visited.add(canonical.path)
+                }
+                .filter { file ->
+                    file.isFile && file.extension.equals("exe", ignoreCase = true) &&
+                        file.canonicalPath.startsWith(root.path + File.separator)
+                }
+                .map { file ->
+                    Program(drive + "\\" + file.relativeTo(source).invariantSeparatorsPath.replace("/", "\\"), file)
+                }
+                .sortedBy { it.dosPath.lowercase(Locale.ROOT) }
+                .toList()
+        }
+    }
+
+    /** Launch exactly the selected EXE, without the automatic installer/patch decision. */
+    fun launchProgram(prepared: PreparedContainer, program: Program) {
+        val exe = program.file.canonicalFile
+        require(exe.isFile && exe.extension.equals("exe", ignoreCase = true)) {
+            "Ce programme n'existe plus. Actualise la liste."
+        }
+        require(programRoots(prepared).any { (_, root) ->
+            exe.path.startsWith(root.canonicalPath + File.separator)
+        }) { "Ce programme ne se trouve plus dans les dossiers de ce jeu." }
+
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putBoolean("enable_wine_debug", false)
+            .putInt("box64_logs", 0)
+            .apply()
+        context.startActivity(Intent(context, XServerDisplayActivity::class.java).apply {
+            putExtra("container_id", prepared.containerId)
+            putExtra("exec_path", program.file.absolutePath)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        })
     }
 
     private fun patchStateDir(prepared: PreparedContainer): File =

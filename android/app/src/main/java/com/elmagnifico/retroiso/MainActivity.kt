@@ -10,6 +10,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -48,6 +52,11 @@ fun App(store: GameStore) {
     var runtimeBusy by remember { mutableStateOf<String?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var patchFor by remember { mutableStateOf<Game?>(null) }
+    val programPreferences = remember { ctx.getSharedPreferences("program-selection", 0) }
+    var programGame by remember { mutableStateOf<Game?>(null) }
+    var programContainer by remember { mutableStateOf<EmbeddedWinlatorBackend.PreparedContainer?>(null) }
+    var programs by remember { mutableStateOf<List<EmbeddedWinlatorBackend.Program>>(emptyList()) }
+    var selectedProgram by remember { mutableStateOf<String?>(null) }
 
     val isoPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
@@ -136,6 +145,37 @@ fun App(store: GameStore) {
         }
     }
 
+    fun chooseProgram(game: Game) {
+        if (runtimeBusy != null || progress != null) return
+        programGame = null
+        runtimeBusy = game.name
+        scope.launch {
+            try {
+                if (!store.hasLocalCache(game)) {
+                    progress = 0f
+                    store.ensureCached(game) { progress = it }
+                    progress = null
+                }
+                val plan = runtime.prepare(game, store.gameDir(game))
+                val prepared = embedded.prepare(game, store.gameDir(game), plan.profile, requireInstaller = false)
+                val available = embedded.listPrograms(prepared)
+                val remembered = selectedProgram.takeIf { programContainer?.containerId == prepared.containerId }
+                    ?: programPreferences.getString(game.id.toString(), null)
+                selectedProgram = available.firstOrNull { it.dosPath == remembered }?.dosPath
+                    ?: available.firstOrNull { it.file == prepared.installerFile }?.dosPath
+                    ?: available.firstOrNull()?.dosPath
+                programs = available
+                programContainer = prepared
+                programGame = game
+            } catch (e: Exception) {
+                message = e.message ?: "Impossible de lire les programmes."
+            } finally {
+                progress = null
+                runtimeBusy = null
+            }
+        }
+    }
+
     Scaffold(
         topBar = { TopAppBar(title = { Text("Mes jeux") }) },
         floatingActionButton = {
@@ -163,6 +203,7 @@ fun App(store: GameStore) {
                         GameCard(
                             game = g,
                             onPlay = { play(g) },
+                            onChooseProgram = { if (!needFiles()) chooseProgram(g) },
                             onPatch = {
                                 if (!needFiles()) {
                                     patchFor = g
@@ -207,6 +248,65 @@ fun App(store: GameStore) {
                 }
             }
         }
+    }
+
+    programGame?.let { game ->
+        AlertDialog(
+            onDismissRequest = { programGame = null },
+            title = { Text("Choisir un programme") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("X: CD • C: programmes installés • D: patchs")
+                    TextButton(onClick = { chooseProgram(game) }) { Text("Actualiser les programmes") }
+                    if (programs.isEmpty()) {
+                        Text("Aucun fichier .exe trouvé. Ajoute le CD ou un patch, puis actualise.")
+                    } else {
+                        LazyColumn(Modifier.fillMaxWidth().heightIn(max = 360.dp)) {
+                            items(programs, key = { it.dosPath }) { program ->
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .selectable(
+                                            selected = selectedProgram == program.dosPath,
+                                            onClick = { selectedProgram = program.dosPath },
+                                            role = Role.RadioButton
+                                        )
+                                        .padding(vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(selected = selectedProgram == program.dosPath, onClick = null)
+                                    Text(
+                                        program.dosPath,
+                                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = programs.any { it.dosPath == selectedProgram },
+                    onClick = {
+                        val prepared = programContainer
+                        val program = programs.firstOrNull { it.dosPath == selectedProgram }
+                        if (prepared != null && program != null) {
+                            try {
+                                embedded.launchProgram(prepared, program)
+                                programPreferences.edit().putString(game.id.toString(), program.dosPath).apply()
+                                programGame = null
+                            } catch (e: Exception) {
+                                message = e.message ?: "Impossible de lancer ce programme."
+                            }
+                        }
+                    }
+                ) { Text("Lancer") }
+            },
+            dismissButton = {
+                TextButton(onClick = { programGame = null }) { Text("Fermer") }
+            }
+        )
     }
 
     progress?.let {
@@ -260,6 +360,7 @@ fun App(store: GameStore) {
 fun GameCard(
     game: Game,
     onPlay: () -> Unit,
+    onChooseProgram: () -> Unit,
     onPatch: () -> Unit,
     onInspectFiles: () -> Unit,
     onReleaseCache: () -> Unit,
@@ -276,6 +377,7 @@ fun GameCard(
                 Text("Bibliothèque : $source • moteur intégré", style = MaterialTheme.typography.bodySmall)
             }
             Button(onClick = onPlay, modifier = Modifier.fillMaxWidth()) { Text("Jouer") }
+            OutlinedButton(onClick = onChooseProgram, modifier = Modifier.fillMaxWidth()) { Text("Choisir un programme") }
             OutlinedButton(onClick = onPatch, modifier = Modifier.fillMaxWidth()) { Text("Ajouter un patch") }
             TextButton(onClick = onInspectFiles, modifier = Modifier.fillMaxWidth()) {
                 Text("Voir EXE / DLL")
