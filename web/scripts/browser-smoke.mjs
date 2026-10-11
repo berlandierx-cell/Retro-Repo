@@ -2,11 +2,17 @@
 import {chromium} from 'playwright';
 import {spawn} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
+import {writeFileSync} from 'node:fs';
 import {PNG} from 'pngjs';
 if (!process.env.CI) throw new Error('This browser verification runs on CI.');
 const server = spawn('python3', ['-m', 'http.server', '4173', '--bind', '127.0.0.1', '--directory', 'dist'], {stdio: 'ignore'});
 let browser; const diagnostic = [];
-const watchdog = setTimeout(() => { console.error('Browser verification exceeded 12 minutes'); server.kill(); process.exit(1); }, 12 * 60 * 1000);
+const watchdog = setTimeout(() => {
+  const message = 'Browser verification exceeded 12 minutes';
+  console.error(message);
+  writeFileSync('browser-results/errors.txt', diagnostic.concat(message).join('\n'));
+  server.kill(); process.exit(1);
+}, 12 * 60 * 1000);
 const bounded = (operation, timeout = 10000) => Promise.race([operation, new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error('Diagnostic timeout')), timeout); timer.unref(); })]);
 let rejectBrowserError; const browserError = new Promise((resolve, reject) => { rejectBrowserError = reject; }); browserError.catch(() => {});
 await mkdir('browser-results', {recursive: true});
@@ -20,10 +26,21 @@ try {
   context.setDefaultTimeout(30000);
   // OAuth is verified separately by the user's signed-in session.
   await page.route('https://accounts.google.com/**', route => route.fulfill({status: 200, contentType: 'text/javascript', body: ''}));
-  page.on('console', message => { if (message.type() === 'error') diagnostic.push(message.text()); });
+  page.on('console', message => {
+    if (message.type() === 'error') { diagnostic.push(message.text()); console.error('Browser: ' + message.text()); }
+  });
+  // Boxedwine can report native runtime faults via alert() instead of pageerror.
+  // Record and fail immediately: an invisible dialog must not consume the entire run.
+  page.on('dialog', dialog => {
+    const message = 'Browser dialog (' + dialog.type() + '): ' + dialog.message();
+    diagnostic.push(message); console.error(message);
+    rejectBrowserError(new Error(message));
+    dialog.dismiss().catch(error => diagnostic.push('Dialog dismissal: ' + error.message));
+  });
   page.on('pageerror', error => { diagnostic.push(error.message); rejectBrowserError(error); });
   await page.goto('http://127.0.0.1:4173/wine.html');
   await page.locator('#status').filter({hasText: 'Prêt.'}).waitFor({timeout: 30000});
+  console.log('Starting real Windows test');
   await page.locator('#test').click();
   await Promise.race([page.waitForFunction(expected => {
     const error = document.getElementById('player').dataset.error; if (error) throw new Error(error);
@@ -77,14 +94,15 @@ try {
   console.log('REAL WINDOWS WRITE AND COLD RESTART: PASS');
 } catch (error) {
   console.error('WINDOWS VERIFICATION FAILED: ' + error.stack);
-  await writeFile('browser-results/errors.txt', String(error.stack));
+  diagnostic.unshift(String(error.stack));
+  await writeFile('browser-results/errors.txt', diagnostic.join('\n'));
   if (browser) {
     const page = browser.contexts()[0]?.pages()[0];
     if (page) {
       await page.screenshot({path: 'browser-results/failure.png', fullPage: true, timeout: 10000}).catch(() => {});
-      diagnostic.push(await page.locator('#status').textContent().catch(() => ''));
-      diagnostic.push(await page.locator('#engine-status').textContent().catch(() => ''));
-      diagnostic.push(await page.locator('#logs').textContent().catch(() => ''));
+      diagnostic.push(await bounded(page.locator('#status').textContent()).catch(error => error.message));
+      diagnostic.push(await bounded(page.locator('#engine-status').textContent()).catch(error => error.message));
+      diagnostic.push(await bounded(page.locator('#logs').textContent()).catch(error => error.message));
       const engine = page.frames().find(item => item.url().endsWith('/wine-frame.html'));
       if (engine) { await engine.locator('#boxedwine-webgl-canvas-0').screenshot({path: 'browser-results/failure-windows.png', timeout: 10000}).catch(() => {}); }
       if (engine) diagnostic.push(await bounded(engine.evaluate(() => {
