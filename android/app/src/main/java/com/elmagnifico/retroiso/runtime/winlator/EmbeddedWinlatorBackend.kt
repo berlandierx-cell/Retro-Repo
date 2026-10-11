@@ -146,6 +146,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", prepared.installerFile.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, prepared.installerFile))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -203,8 +204,26 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         context.startActivity(Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", program.file.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, program.file))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         })
+    }
+
+
+    private fun programDosPath(prepared: PreparedContainer, file: File): String {
+        val target = file.canonicalFile
+        val roots = listOf(
+            "X:" to prepared.cdDir,
+            "C:" to File(prepared.rootDir, ".wine/drive_c"),
+            "D:" to requireNotNull(prepared.cdDir.parentFile)
+        )
+        for ((drive, directory) in roots) {
+            val root = directory.canonicalFile
+            if (target.path.startsWith(root.path + File.separator)) {
+                return drive + "\\" + target.relativeTo(root).invariantSeparatorsPath.replace("/", "\\")
+            }
+        }
+        throw IllegalArgumentException("Programme hors des lecteurs de ce jeu : " + file.name)
     }
 
     private fun patchStateDir(prepared: PreparedContainer): File =
@@ -256,6 +275,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", patch.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, patch))
             putExtra("retroiso_auto_exit", true)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
@@ -359,6 +379,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", exe.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, exe))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -474,6 +495,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", setup.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, setup))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -495,6 +517,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", autorun.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, autorun))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)
@@ -507,6 +530,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
             putExtra("exec_path", prepared.isoFile.absolutePath)
+            putExtra("retroiso_dos_path", programDosPath(prepared, prepared.isoFile))
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)

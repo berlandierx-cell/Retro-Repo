@@ -128,6 +128,7 @@ field_needle = "    private DebugDialog debugDialog;\n"
 field_repl = (
     "    private DebugDialog debugDialog;\n"
     "    private final StringBuilder retroIsoBootLog = new StringBuilder();\n"
+    "    private com.elmagnifico.retroiso.runtime.winlator.RetroIsoDiagnostics retroIsoDiagnostics;\n"
 )
 if field_needle not in s:
     raise SystemExit("Retro ISO log field patch point not found")
@@ -138,7 +139,12 @@ needle = '''        ProcessHelper.removeAllDebugCallbacks();
 '''
 replacement = '''        ProcessHelper.removeAllDebugCallbacks();
         retroIsoBootLog.setLength(0);
+        retroIsoDiagnostics = new com.elmagnifico.retroiso.runtime.winlator.RetroIsoDiagnostics(
+            this, "EXE: " + getIntent().getStringExtra("exec_path") +
+            "\\nChemin Windows: " + getIntent().getStringExtra("retroiso_dos_path") +
+            "\\nContainer: " + getIntent().getIntExtra("container_id", 0));
         ProcessHelper.addDebugCallback((line) -> {
+            retroIsoDiagnostics.append(line);
             synchronized (retroIsoBootLog) {
                 retroIsoBootLog.append(line).append("\\n");
                 if (retroIsoBootLog.length() > 16000) {
@@ -252,6 +258,8 @@ s = s.replace(needle2, replacement2, 1)
 term_old = '''        guestProgramLauncherComponent.setTerminationCallback((status) -> exit());
 '''
 term_new = '''        guestProgramLauncherComponent.setTerminationCallback((status) -> runOnUiThread(() -> {
+            retroIsoDiagnostics.append("RETROISO_PROCESS_EXIT: " + status);
+            retroIsoDiagnostics.flush();
             if (getIntent().getBooleanExtra("retroiso_auto_exit", false)) {
                 exit();
                 return;
@@ -295,12 +303,37 @@ wine_debug_new = '''        boolean enableWineDebug = preferences.getBoolean("en
             envVars.put("WINEDEBUG", "err+ole,fixme+ole,warn+ole,err+rpc,fixme+rpc,err+seh,err+module,err+loaddll,trace+wininet,warn+wininet,err+wininet,trace+ws2_32,warn+ws2_32,err+ws2_32");
         }
         else {
-            envVars.put("WINEDEBUG", "-all");
+            envVars.put("WINEDEBUG", "-all,err+all,warn+module,trace+process,trace+loaddll,trace+msgbox");
         }
 '''
 if wine_debug_old not in s:
     raise SystemExit("Retro ISO WINEDEBUG patch point not found")
 s = s.replace(wine_debug_old, wine_debug_new, 1)
+
+
+# Preserve the exact drive selected in Retro ISO instead of remapping CD files to D:\\CD.
+dos_old = '                execPath = WineUtils.unixToDOSPath(intent.getStringExtra("exec_path"), container);'
+dos_new = '''                execPath = intent.getStringExtra("retroiso_dos_path");
+                if (execPath == null || execPath.isEmpty())
+                    execPath = WineUtils.unixToDOSPath(intent.getStringExtra("exec_path"), container);'''
+if dos_old not in s:
+    raise SystemExit("Retro ISO DOS launch patch point not found")
+s = s.replace(dos_old, dos_new, 1)
+
+command_old = '            guestProgramLauncherComponent.setGuestExecutable(guestExecutable);'
+command_new = '''            retroIsoDiagnostics.append("RETROISO_COMMAND: " + guestExecutable);
+            retroIsoDiagnostics.append("RETROISO_GRAPHICS: " + java.util.Arrays.toString(graphicsDriver));
+            guestProgramLauncherComponent.setGuestExecutable(guestExecutable);'''
+if command_old not in s:
+    raise SystemExit("Retro ISO command log patch point not found")
+s = s.replace(command_old, command_new, 1)
+
+destroy_old = '        super.onDestroy();'
+destroy_new = '''        if (retroIsoDiagnostics != null) retroIsoDiagnostics.close();
+        super.onDestroy();'''
+if destroy_old not in s:
+    raise SystemExit("Retro ISO diagnostic lifecycle patch point not found")
+s = s.replace(destroy_old, destroy_new, 1)
 
 p.write_text(s)
 

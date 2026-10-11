@@ -57,6 +57,9 @@ jobs:
           cat > /tmp/retroiso-release-notes.md <<'NOTES'
           APK Android avec Winlator/Wine/Box64 intégré.
           
+          - Lancement des fichiers du CD explicitement sur X:, comme dans le sélecteur.
+          - Bouton Diagnostic : rapport local du dernier lancement, copiable après une erreur.
+          - Cause de Failed, code 8 encore à confirmer sur le téléphone.
           - Choisir un programme : liste des EXE du CD (X:), de l'installation (C:) et des patchs (D:).
           - Actualisation de la liste et mémorisation du dernier programme choisi.
           - Gangsters 2 : installation automatique toujours via Autorun.exe.
@@ -65,4 +68,4 @@ jobs:
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.1 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease

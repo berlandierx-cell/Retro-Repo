@@ -1,5 +1,8 @@
 package com.elmagnifico.retroiso
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -30,6 +33,9 @@ import androidx.compose.ui.unit.dp
 import com.elmagnifico.retroiso.runtime.RuntimeManager
 import com.elmagnifico.retroiso.runtime.winlator.EmbeddedWinlatorBackend
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import com.elmagnifico.retroiso.runtime.winlator.RetroIsoDiagnostics
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -50,6 +56,8 @@ fun App(store: GameStore) {
     var games by remember { mutableStateOf(store.load()) }
     var progress by remember { mutableStateOf<Float?>(null) }
     var runtimeBusy by remember { mutableStateOf<String?>(null) }
+    var diagnostic by remember { mutableStateOf<String?>(null) }
+    var diagnosticCopied by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var patchFor by remember { mutableStateOf<Game?>(null) }
     val programPreferences = remember { ctx.getSharedPreferences("program-selection", 0) }
@@ -177,7 +185,19 @@ fun App(store: GameStore) {
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Mes jeux") }) },
+        topBar = {
+            TopAppBar(
+                title = { Text("Mes jeux") },
+                actions = {
+                    TextButton(onClick = {
+                        scope.launch {
+                            diagnostic = withContext(Dispatchers.IO) { RetroIsoDiagnostics.readLatest(ctx) }
+                            diagnosticCopied = false
+                        }
+                    }) { Text("Diagnostic") }
+                }
+            )
+        },
         floatingActionButton = {
             ExtendedFloatingActionButton(
                 onClick = { if (!needFiles()) isoPicker.launch(arrayOf("*/*")) },
@@ -334,6 +354,29 @@ fun App(store: GameStore) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text("La première exécution peut être plus longue car le moteur est installé dans Retro ISO.")
                 }
+            }
+        )
+    }
+
+    diagnostic?.let { report ->
+        AlertDialog(
+            onDismissRequest = { diagnostic = null },
+            title = { Text("Dernier lancement") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text("Le bouton copie le rapport complet. Aperçu des dernières lignes :")
+                    Text(report.takeLast(14000), style = MaterialTheme.typography.bodySmall)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val clipboard = ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Diagnostic Retro ISO", report))
+                    diagnosticCopied = true
+                }) { Text(if (diagnosticCopied) "Copié !" else "Copier le rapport") }
+            },
+            dismissButton = {
+                TextButton(onClick = { diagnostic = null }) { Text("Fermer") }
             }
         )
     }
