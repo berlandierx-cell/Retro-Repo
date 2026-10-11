@@ -70,7 +70,8 @@ jobs:
           - Correction de la clé réellement lue par Hothouse : Software\Gangsters2, sans g final.
           - Chemin préparé dans les deux vues du registre, pour le lancement automatique et manuel du patch.
           - Validation de la mise à jour par les SHA-256 des quatre fichiers du pack fourni ; les anciens marqueurs seuls ne suffisent plus.
-          - Aucune réinstallation nécessaire. Relancer le patch, puis Jouer après son message de réussite.
+          - Le bouton Jouer démarre maintenant directement Gangsters 2 si installé : l'updater 1.0.7 en échec n'est plus relancé automatiquement.
+          - Le patch reste accessible manuellement via Choisir un programme. Pas de réinstallation du jeu nécessaire tant que l'APK peut être mise à jour sans désinstallation.
           
           - Lancement des fichiers du CD explicitement sur X:, comme dans le sélecteur.
           - Bouton Diagnostic : rapport local du dernier lancement, copiable après une erreur.
