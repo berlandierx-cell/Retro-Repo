@@ -8,7 +8,7 @@
     "drive": "X:",
     "image": "disc.iso"
   },
-  "installer": "Autorun.exe",
+  "installer": "Setup.exe",
   "executable": "Gangsters2SpawnedVersion.exe",
   "patch": "1.0.7",
   "compatibility": {

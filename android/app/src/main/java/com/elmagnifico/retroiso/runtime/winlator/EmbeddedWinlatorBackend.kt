@@ -95,7 +95,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val cdDir = File(gameDir, "CD")
         require(cdDir.isDirectory) { "Contenu du CD introuvable : " + cdDir.absolutePath }
 
-        val installerFile = File(cdDir, profile.installer)
+        val installerFile = File(cdDir, profile.installer).takeIf { it.isFile }
+            ?: cdDir.listFiles()?.firstOrNull { it.isFile && it.name.equals(profile.installer, ignoreCase = true) }
+            ?: File(cdDir, profile.installer)
         require(installerFile.isFile) {
             "Installeur introuvable : " + installerFile.absolutePath
         }
@@ -131,15 +133,14 @@ class EmbeddedWinlatorBackend(private val context: Context) {
     }
 
     /**
-     * Lance directement le vrai Autorun.exe extrait.
+     * Lance directement l'installeur indiqué par le profil (Setup.exe pour Gangsters 2).
      * Comme X: pointe vers le même CD extrait et est typé CD-ROM,
      * Wine voit immédiatement le média au démarrage de l'installeur.
      */
     fun launchInstaller(prepared: PreparedContainer) {
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
-            .putBoolean("enable_wine_debug", true)
-            .putString("wine_debug_channels", "ole,seh,loaddll")
-            .putInt("box64_logs", 1)
+            .putBoolean("enable_wine_debug", false)
+            .putInt("box64_logs", 0)
             .apply()
 
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
@@ -427,6 +428,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
      * Cela reproduit le comportement "insérer le CD puis Jouer" du jeu original.
      */
     fun launchAutorun(prepared: PreparedContainer) {
+        val autorun = prepared.cdDir.listFiles()?.firstOrNull {
+            it.isFile && it.name.equals("Autorun.exe", ignoreCase = true)
+        } ?: throw IllegalStateException("Autorun.exe introuvable dans le CD.")
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).edit()
             .putBoolean("enable_wine_debug", false)
             .putInt("box64_logs", 0)
@@ -434,7 +438,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
         val intent = Intent(context, XServerDisplayActivity::class.java).apply {
             putExtra("container_id", prepared.containerId)
-            putExtra("exec_path", prepared.installerFile.absolutePath)
+            putExtra("exec_path", autorun.absolutePath)
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
         context.startActivity(intent)

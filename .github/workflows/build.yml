@@ -49,11 +49,18 @@ jobs:
       - name: Build Retro ISO with embedded runtime
         run: gradle assembleDebug --no-daemon
 
-      - name: Publier l'APK dans les Releases
+      - name: Publier l'APK de test sans supprimer les versions précédentes
         env:
           GH_TOKEN: "${{ github.token }}"
         run: |
-          gh release delete latest --yes --cleanup-tag || true
-          gh release create latest app/build/outputs/apk/debug/app-debug.apk             --title "Retro ISO (runtime intégré)"             --notes "Build automatique avec runtime Winlator intégré"
-
-# runtime package path refresh
+          TAG="apk-${GITHUB_RUN_ID}"
+          cat > /tmp/retroiso-release-notes.md <<'NOTES'
+          APK Android avec Winlator/Wine/Box64 intégré.
+          
+          - Gangsters 2 : lancement direct de Setup.exe.
+          - Traces détaillées Wine/Box64 désactivées pour l'installation.
+          - Import ISO via le sélecteur Android, notamment Google Drive.
+          
+          Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
+          NOTES
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.4 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease
