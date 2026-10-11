@@ -41,7 +41,7 @@ async function prepare() {
     send({imported: true});
   }
   FS.mkdirTree('/control'); FS.mkdirTree('/cdrom');
-  for (const name of ['stop', 'stopped', 'job.id', 'job.sh', 'ack', 'result', 'registry.log', 'program.log']) FS.writeFile('/control/' + name, '');
+  for (const name of ['windows.started', 'stop', 'stopped', 'job.id', 'job.sh', 'ack', 'result', 'registry.log', 'program.log']) FS.writeFile('/control/' + name, '');
   FS.writeFile('/control/daemon.sh', DAEMON); FS.chmod('/control/daemon.sh', 0o755);
   if (!config.maintenance) {
     const winePrefix = prefix + '/home/username/.wine'; FS.mkdirTree(winePrefix);

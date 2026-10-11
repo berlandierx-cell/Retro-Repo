@@ -12,7 +12,7 @@ const job = text => `echo ${text} >/home/username/retroiso-control/proof\n`;
 ctx.Module = {noInitialRun: true, noExitRuntime: true, print: line => { if (!String(line).startsWith('ran main loop')) logs.push(line); }, printErr: line => logs.push(line),
   preRun: [() => {
     ctx.FS.mkdirTree('/root'); ctx.FS.mkdirTree('/control');
-    for (const name of ['stop', 'stopped', 'job.id', 'job.sh', 'ack', 'proof']) ctx.FS.writeFile('/control/' + name, '');
+    for (const name of ['windows.started', 'stop', 'stopped', 'job.id', 'job.sh', 'ack', 'proof']) ctx.FS.writeFile('/control/' + name, '');
     ctx.FS.writeFile('/control/daemon.sh', DAEMON); ctx.FS.writeFile('/control/job.sh', job('FIRST')); ctx.FS.writeFile('/control/job.id', '1\n');
     ctx.FS.writeFile('/wine.zip', fs.readFileSync(path.resolve(__dirname, '../dist/vendor/wine.zip')));
   }],

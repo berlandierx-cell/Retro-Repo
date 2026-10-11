@@ -8,9 +8,12 @@ while :; do
   read -r stop </home/username/retroiso-control/stop
   if [ "$stop" = stop ]; then
     # End the Windows session before waiting for the server to flush its registry.
+    read -r windows_started </home/username/retroiso-control/windows.started
+    if [ "$windows_started" = 1 ]; then
     WINEDLLOVERRIDES='mscoree,mshtml=' /bin/wine wineboot -e -f -k -s >/home/username/retroiso-control/registry.log 2>&1
     if [ $? -ne 0 ]; then echo CLOSE_FAILED >/home/username/retroiso-control/stopped; exit 1; fi
     /opt/wine/bin/wineserver -w
+    fi
     if [ -n "$job_pid" ]; then wait "$job_pid"; fi
     echo STOPPED >/home/username/retroiso-control/stopped
     exit 0
@@ -40,5 +43,5 @@ export function jobScript(program, renderer = 'gdi') {
   const directory = path.slice(0, Math.max(path.lastIndexOf('/'), 0));
   const working = /^[D]:/i.test(program) ? '/mnt/drive_d' : '/home/username/.wine/drive_c';
   // The compact runtime omits Mono and Gecko; skip their download dialogs.
-  return `#!/bin/sh\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\nWINEDLLOVERRIDES='mscoree,mshtml=' /bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
+  return `#!/bin/sh\necho 1 >/home/username/retroiso-control/windows.started\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\nWINEDLLOVERRIDES='mscoree,mshtml=' /bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
 }
