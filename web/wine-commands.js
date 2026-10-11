@@ -37,5 +37,5 @@ export function jobScript(program, renderer = 'gdi') {
   const path = /^[CD]:\\/i.test(program) ? program.slice(3).replace(/\\/g, '/') : '';
   const directory = path.slice(0, Math.max(path.lastIndexOf('/'), 0));
   const working = /^[D]:/i.test(program) ? '/mnt/drive_d' : '/home/username/.wine/drive_c';
-  return `#!/bin/sh\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\n/bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
+  return `#!/bin/sh\nif [ ! -f /home/username/.wine/.retroiso-initialized ]; then\n  WINEDLLOVERRIDES='mscoree,mshtml=' /bin/wine wineboot.exe -u >/home/username/retroiso-control/registry.log 2>&1\n  code=$?\n  if [ "$code" != 0 ]; then echo "$code" >/home/username/retroiso-control/result; exit "$code"; fi\n  /opt/wine/bin/wineserver -w\n  echo ready >/home/username/.wine/.retroiso-initialized\nfi\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\n/bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
 }
