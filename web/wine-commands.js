@@ -15,8 +15,8 @@ while :; do
   fi
   read -r job </home/username/retroiso-control/job.id
   if [ -n "$job" ] && [ "$job" != "$last_job" ]; then
-    cp /home/username/retroiso-control/job.sh /home/username/retroiso-control/current.sh
-    /bin/sh /home/username/retroiso-control/current.sh &
+    cp /home/username/retroiso-control/job.sh /home/username/retroiso-control/job_$job.sh
+    /bin/sh /home/username/retroiso-control/job_$job.sh &
     job_pid=$!
     last_job=$job
     echo "$job" >/home/username/retroiso-control/ack
@@ -37,6 +37,5 @@ export function jobScript(program, renderer = 'gdi') {
   const path = /^[CD]:\\/i.test(program) ? program.slice(3).replace(/\\/g, '/') : '';
   const directory = path.slice(0, Math.max(path.lastIndexOf('/'), 0));
   const working = /^[D]:/i.test(program) ? '/mnt/drive_d' : '/home/username/.wine/drive_c';
-  const marker = program === 'test' ? "/bin/wine reg add 'HKCU\\Software\\RetroIso' /v PersistenceMarker /d Windows-registry-write /f >>/home/username/retroiso-control/registry.log 2>&1\n" : '';
-  return `#!/bin/sh\n/bin/wine reg add 'HKCU\\Software\\Wine\\Direct3D' /v DirectDrawRenderer /d ${renderer} /f >/home/username/retroiso-control/registry.log 2>&1\n/bin/wine reg add 'HKLM\\Software\\Wine\\Drives' /v 'd:' /d cdrom /f >>/home/username/retroiso-control/registry.log 2>&1\n${marker}cd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\n/bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
+  return `#!/bin/sh\ncd ${quote(working + (directory ? '/' + directory : ''))} || exit 1\n/bin/wine ${args.map(quote).join(' ')} >/home/username/retroiso-control/program.log 2>&1\necho $? >/home/username/retroiso-control/result\n`;
 }

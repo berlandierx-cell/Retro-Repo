@@ -2,6 +2,7 @@ import {file, root, removeFile} from './storage.js';
 import {readISO} from './iso.js';
 import {exportPrefix, importPrefix} from './wine-pack.js';
 import {DAEMON, ROOT_BASE, jobScript} from './wine-commands.js';
+import {setRegistryValue} from './wine-registry.js';
 import {softwarePresenter, configureGLCanvas} from './wine-video.js';
 const send = data => parent.postMessage({retroWine: true, ...data}, location.origin);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -42,6 +43,23 @@ async function prepare() {
   FS.mkdirTree('/control'); FS.mkdirTree('/cdrom');
   for (const name of ['stop', 'stopped', 'job.id', 'job.sh', 'ack', 'result', 'registry.log', 'program.log']) FS.writeFile('/control/' + name, '');
   FS.writeFile('/control/daemon.sh', DAEMON); FS.chmod('/control/daemon.sh', 0o755);
+  if (!config.maintenance) {
+    const winePrefix = prefix + '/home/username/.wine'; FS.mkdirTree(winePrefix);
+    for (const [name, section, key, value] of [
+      ['user.reg', 'Software\\Wine\\Direct3D', 'DirectDrawRenderer', config.renderer || 'gdi'],
+      ['system.reg', 'Software\\Wine\\Drives', 'd:', 'cdrom'],
+    ]) {
+      const path = winePrefix + '/' + name;
+      let text;
+      if (FS.analyzePath(path).exists) text = FS.readFile(path, {encoding: 'utf8'});
+      else {
+        const response = await fetch('vendor/wine-prefix/' + name);
+        if (!response.ok) throw new Error('Registre de base indisponible.');
+        text = await response.text();
+      }
+      FS.writeFile(path, setRegistryValue(text, section, key, value));
+    }
+  }
   const driveC = prefix + '/home/username/.wine/drive_c'; FS.mkdirTree(driveC);
   const test = await fetch('retroiso-test.exe'); if (!test.ok) throw new Error('Programme de test indisponible.');
   FS.writeFile(driveC + '/retroiso-test.exe', new Uint8Array(await test.arrayBuffer()));

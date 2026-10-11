@@ -24,6 +24,8 @@ export async function buildWine(web, destination) {
   const target = path.join(destination, 'vendor/boxedwine'); await mkdir(target, {recursive: true});
   execFileSync('python3', ['-c', 'import zipfile,sys,pathlib\nz=zipfile.ZipFile(sys.argv[1])\nfor n in ("boxedwine.js","boxedwine.wasm"):\n pathlib.Path(sys.argv[2],n).write_bytes(z.read("Web/SingleThreadedJit/"+n))', path.join(cache, 'engine.zip'), target]);
   await copyFile(path.join(cache, 'wine.zip'), path.join(destination, 'vendor/wine.zip'));
+  const templates = path.join(destination, 'vendor/wine-prefix'); await mkdir(templates, {recursive: true});
+  execFileSync('python3', ['-c', 'import zipfile,sys,pathlib\nz=zipfile.ZipFile(sys.argv[1])\nfor n in ("user.reg","system.reg"):\n matches=[p for p in z.namelist() if p.endswith("home/username/.wine/"+n)]\n if len(matches)!=1: raise RuntimeError("Wine registry template missing: "+n)\n pathlib.Path(sys.argv[2],n).write_bytes(z.read(matches[0]))', path.join(cache, 'wine.zip'), templates]);
   const response = await fetch(`https://raw.githubusercontent.com/danoon2/Boxedwine/${WINE_BUILD.source}/license.txt`);
   if (!response.ok) throw new Error('Boxedwine license: HTTP ' + response.status);
   await writeFile(path.join(target, 'LICENSE'), await response.text());

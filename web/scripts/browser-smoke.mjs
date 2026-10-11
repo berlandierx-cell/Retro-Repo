@@ -81,6 +81,7 @@ try {
       diagnostic.push(await page.locator('#engine-status').textContent().catch(() => ''));
       diagnostic.push(await page.locator('#logs').textContent().catch(() => ''));
       const engine = page.frames().find(item => item.url().endsWith('/wine-frame.html'));
+      if (engine) { await engine.locator('#boxedwine-webgl-canvas-0').screenshot({path: 'browser-results/failure-windows.png'}).catch(() => {}); }
       if (engine) diagnostic.push(await engine.evaluate(() => {
         if (!globalThis.FS) return 'No runtime filesystem';
         return JSON.stringify(Object.fromEntries(['job.id', 'ack', 'result', 'registry.log', 'program.log', 'stop', 'stopped'].map(name => {

@@ -36,5 +36,5 @@ test('Windows paths remain literal shell arguments', () => {
   const path = "D:\\Setup's folder\\installer.exe"; assert.deepEqual(windowsArguments(path), ['explorer', '/desktop=RetroIso,800x600', path]); assert.ok(jobScript(path).includes("Setup'\\''s")); assert.throws(() => windowsArguments('/tmp/program')); assert.throws(() => jobScript(path, 'invalid'));
 });
 test('original Win32 test has an x86 PE header and real Windows imports', () => {
-  const pe = makeWineTest(), view = new DataView(pe.buffer); assert.equal(view.getUint16(0, true), 0x5a4d); assert.equal(view.getUint32(0x80, true), 0x4550); assert.equal(view.getUint16(0x84, true), 0x14c); assert.equal(view.getUint16(0x98 + 68, true), 2); assert.ok(new TextDecoder().decode(pe).includes('WriteFile')); assert.ok(new TextDecoder().decode(pe).includes('MessageBoxA'));
+  const pe = makeWineTest(), view = new DataView(pe.buffer); assert.equal(view.getUint16(0, true), 0x5a4d); assert.equal(view.getUint32(0x80, true), 0x4550); assert.equal(view.getUint16(0x84, true), 0x14c); assert.equal(view.getUint16(0x98 + 68, true), 2); assert.ok(new TextDecoder().decode(pe).includes('WriteFile')); assert.ok(new TextDecoder().decode(pe).includes('MessageBoxA')); assert.ok(new TextDecoder().decode(pe).includes('RegSetValueExA')); assert.ok(!jobScript('test').includes('wine reg'));
 });

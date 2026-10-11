@@ -8,7 +8,7 @@ import {makeWineTest} from './make-wine-test.mjs';
 const web = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const destination = path.join(web, 'dist');
 await rm(destination, {recursive: true, force: true}); await mkdir(path.join(destination, 'vendor'), {recursive: true});
-for (const name of ['index.html', 'style.css', 'app.js', 'disk.js', 'storage.js', 'drive.js', 'config.json', 'manifest.webmanifest', 'wine.html', 'wine.css', 'wine-app.js', 'wine-frame.html', 'wine-frame.js', 'wine-video.js', 'iso.js', 'wine-pack.js', 'wine-commands.js']) await copyFile(path.join(web, name), path.join(destination, name));
+for (const name of ['index.html', 'style.css', 'app.js', 'disk.js', 'storage.js', 'drive.js', 'config.json', 'manifest.webmanifest', 'wine.html', 'wine.css', 'wine-app.js', 'wine-frame.html', 'wine-frame.js', 'wine-video.js', 'iso.js', 'wine-pack.js', 'wine-commands.js', 'wine-registry.js']) await copyFile(path.join(web, name), path.join(destination, name));
 for (const name of ['libv86.js', 'v86.wasm', 'v86-fallback.wasm']) await copyFile(path.join(web, 'node_modules/v86/build', name), path.join(destination, 'vendor', name));
 const pin = '94faf3d6b19ecabc53a4010aaa24252fa6a162e2';
 const sums = {};
