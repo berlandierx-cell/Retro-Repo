@@ -2,9 +2,10 @@ import {file, root, removeFile} from './storage.js';
 import {readISO} from './iso.js';
 import {exportPrefix, importPrefix} from './wine-pack.js';
 import {DAEMON, ROOT_BASE, jobScript} from './wine-commands.js';
+import {softwarePresenter, configureGLCanvas} from './wine-video.js';
 const send = data => parent.postMessage({retroWine: true, ...data}, location.origin);
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-let config, prefix, initialized = false, timer, stopped = false, jobId = 0, syncTail = Promise.resolve();
+let config, prefix, initialized = false, timer, stopped = false, jobId = 0, initialMarkerSize = 0, lastResult = '', syncTail = Promise.resolve();
 const fs = () => globalThis.FS;
 const sync = populate => {
   const operation = syncTail.then(() => new Promise((resolve, reject) => fs().syncfs(populate, error => error ? reject(error) : resolve())));
@@ -15,6 +16,7 @@ function queueJob(program) {
   if (stopped) throw new Error('Cette session est fermée. Relance le PC.');
   if (jobId && fs().readFile('/control/ack', {encoding: 'utf8'}).trim() !== String(jobId)) throw new Error('Un lancement est déjà en attente.');
   // Fixed filenames are necessary: Boxedwine caches directory entries on first access.
+  fs().writeFile('/control/result', ''); lastResult = '';
   fs().writeFile('/control/job.sh', jobScript(program, config.renderer));
   fs().writeFile('/control/job.id', String(++jobId) + '\n');
 }
@@ -32,6 +34,8 @@ async function prepare() {
   const driveC = prefix + '/home/username/.wine/drive_c'; FS.mkdirTree(driveC);
   const test = await fetch('retroiso-test.exe'); if (!test.ok) throw new Error('Programme de test indisponible.');
   FS.writeFile(driveC + '/retroiso-test.exe', new Uint8Array(await test.arrayBuffer()));
+  const marker = driveC + '/retroiso-persistence.txt';
+  if (FS.analyzePath(marker).exists) initialMarkerSize = FS.stat(marker).size;
   tell('wine', 'Chargement de Wine depuis le stockage local…');
   FS.writeFile('/wine.zip', new Uint8Array(await (await file(config.wineFile)).arrayBuffer()), {canOwn: true});
   if (config.cdrom) {
@@ -118,8 +122,10 @@ window.addEventListener('message', async event => {
     if (message.action === 'init') {
       if (config || !/^[a-zA-Z0-9-]{1,80}$/.test(message.config?.id)) throw new Error('Session invalide.');
       config = message.config; tell('engine', 'Démarrage du moteur…');
+      configureGLCanvas(document.getElementById('canvas'));
       globalThis.Module = {
         noInitialRun: true, noExitRuntime: true, canvas: document.getElementById('canvas'),
+        boxedwinePresentSoftwareFrame: softwarePresenter(document.getElementById('boxedwine-webgl-canvas-0')),
         locateFile: name => new URL('vendor/boxedwine/' + name, location.href).href,
         print: line => { if (!String(line).startsWith('ran main loop')) send({log: String(line)}); }, printErr: line => send({log: String(line)}),
         onAbort: error => send({fatal: 'Moteur arrêté : ' + error}),
@@ -135,7 +141,13 @@ window.addEventListener('message', async event => {
             timer = setInterval(() => {
               sync(false).catch(error => { globalThis.Module.pauseMainLoop?.(); send({fatal: 'Enregistrement local impossible : ' + error.message}); clearInterval(timer); });
               const marker = prefix + '/home/username/.wine/drive_c/retroiso-persistence.txt';
-              if (config.program === 'test' && fs().analyzePath(marker).exists) send({proof: fs().readFile(marker, {encoding: 'utf8'})});
+              if (config.program === 'test' && fs().analyzePath(marker).exists && fs().stat(marker).size > initialMarkerSize) send({proof: fs().readFile(marker, {encoding: 'utf8'})});
+              const result = fs().readFile('/control/result', {encoding: 'utf8'}).trim();
+              if (result && result !== lastResult) {
+                lastResult = result;
+                for (const name of ['registry.log', 'program.log']) send({log: fs().readFile('/control/' + name, {encoding: 'utf8'}).slice(-8000)});
+                if (result !== '0') send({fatal: 'Le programme Windows a échoué (' + result + '). Consulte le diagnostic. La session reste ouverte pour enregistrer.'});
+              }
             }, 5000);
           }
         },

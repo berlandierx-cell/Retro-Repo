@@ -6,6 +6,7 @@ import {PNG} from 'pngjs';
 if (!process.env.CI) throw new Error('This browser verification runs on CI.');
 const server = spawn('python3', ['-m', 'http.server', '4173', '--bind', '127.0.0.1', '--directory', 'dist'], {stdio: 'ignore'});
 let browser; const diagnostic = [];
+let rejectBrowserError; const browserError = new Promise((resolve, reject) => { rejectBrowserError = reject; }); browserError.catch(() => {});
 await mkdir('browser-results', {recursive: true});
 try {
   for (let attempt = 0; attempt < 100; attempt++) {
@@ -17,16 +18,18 @@ try {
   // OAuth is verified separately by the user's signed-in session.
   await page.route('https://accounts.google.com/**', route => route.fulfill({status: 200, contentType: 'text/javascript', body: ''}));
   page.on('console', message => { if (message.type() === 'error') diagnostic.push(message.text()); });
-  page.on('pageerror', error => diagnostic.push(error.message));
+  page.on('pageerror', error => { diagnostic.push(error.message); rejectBrowserError(error); });
   await page.goto('http://127.0.0.1:4173/wine.html');
   await page.locator('#status').filter({hasText: 'Prêt.'}).waitFor({timeout: 30000});
   await page.locator('#test').click();
-  await page.locator('#engine-status').filter({hasText: 'écriture réussie'}).waitFor({timeout: 360000});
+  await Promise.race([page.locator('#engine-status').filter({hasText: 'écriture réussie'}).waitFor({timeout: 360000}), browserError]);
+  console.log('Windows file write: PASS');
   await page.screenshot({path: 'browser-results/first-launch.png', fullPage: true});
   const screen = await page.locator('#frame-host').screenshot({path: 'browser-results/windows-screen.png'});
   const png = PNG.sync.read(screen); let litPixels = 0;
   for (let i = 0; i < png.data.length; i += 4) if (png.data[i] + png.data[i + 1] + png.data[i + 2] > 45) litPixels++;
   if (litPixels < 500) throw new Error('Windows wrote the file but its screen is black');
+  console.log('Visible Windows screen: PASS, pixels=' + litPixels);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   if (overflow) throw new Error('Wine page overflows the mobile viewport');
   const frame = page.frames().find(item => item.url().endsWith('/wine-frame.html'));
@@ -38,7 +41,7 @@ try {
   if (!pixels.initialized || !pixels.width || !pixels.height) throw new Error('Real graphical input/canvas was not initialized');
   await page.locator('#close').click(); await page.locator('#player').waitFor({state: 'hidden', timeout: 120000});
   await page.reload(); await page.locator('#status').filter({hasText: 'Prêt.'}).waitFor();
-  await page.locator('#test').click(); await page.locator('#engine-status').filter({hasText: 'PERSISTENCE OK'}).waitFor({timeout: 360000});
+  await page.locator('#test').click(); await Promise.race([page.locator('#engine-status').filter({hasText: 'PERSISTENCE OK'}).waitFor({timeout: 360000}), browserError]);
   await page.screenshot({path: 'browser-results/cold-restart.png', fullPage: true});
   await page.locator('#close').click(); await page.locator('#player').waitFor({state: 'hidden', timeout: 120000});
   if (diagnostic.length) throw new Error('Browser errors: ' + diagnostic.join('\n'));
