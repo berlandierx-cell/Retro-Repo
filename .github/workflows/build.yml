@@ -63,6 +63,10 @@ jobs:
           cat > /tmp/retroiso-release-notes.md <<'NOTES'
           APK Android avec Winlator/Wine/Box64 intégré.
           
+          - Gangsters 2 : contrôles tactiles flottants dans les bandes latérales : flèches, clic droit, Entrée, Échap, clic gauche, double-clic.
+          - Mode DIRECT par défaut : un toucher vise et clique à la position absolue dans l'image 4:3 ; appui long = clic droit ; glisser = clic gauche maintenu.
+          - Bouton DIRECT / SOURIS pour revenir au touchpad Winlator ; choix sauvegardé pour les lancements suivants.
+          - Commandes activées uniquement en jouant à Gangsters 2, pas pendant l'installation ou dans les autres jeux.
           - Gangsters 2 : bureau Wine réglé à 800x600 afin que le jeu 4:3 remplisse la hauteur de l'écran, sans étirement.
           - Le réglage s'applique aussi au conteneur existant, sans réinstaller le jeu ni toucher aux autres jeux.
           - Gangsters 2 : rendu DirectDraw basculé sur VirGL + WineD3D, pour éviter le chemin Gladio qui échoue à charger libEGL.so.1 sur Pixel 9a.
@@ -86,5 +90,5 @@ jobs:
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.5 — affichage Gangsters 2" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.6 — commandes tactiles" --notes-file /tmp/retroiso-release-notes.md --prerelease
 
