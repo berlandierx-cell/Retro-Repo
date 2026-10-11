@@ -25,6 +25,12 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Verify patch detection
+        run: |
+          mkdir -p /tmp/retroiso-patch-tests
+          javac -d /tmp/retroiso-patch-tests app/src/main/java/com/elmagnifico/retroiso/runtime/winlator/GangstersPatch107.java tests/GangstersPatch107Test.java
+          java -cp /tmp/retroiso-patch-tests com.elmagnifico.retroiso.runtime.winlator.GangstersPatch107Test
+
       - name: Install ELF patch tool
         run: |
           if ! command -v patchelf >/dev/null 2>&1; then
@@ -57,9 +63,10 @@ jobs:
           cat > /tmp/retroiso-release-notes.md <<'NOTES'
           APK Android avec Winlator/Wine/Box64 intégré.
           
-          - Correction : le lancement manuel du patch prépare maintenant le chemin du jeu, comme le lancement automatique.
-          - Le chemin est écrit et vérifié dans les deux vues du registre Wine. La valeur VERSION est conservée.
-          - Le diagnostic indique le jeu ciblé et le résultat de cette préparation.
+          - Correction de la clé réellement lue par Hothouse : Software\Gangsters2, sans g final.
+          - Chemin préparé dans les deux vues du registre, pour le lancement automatique et manuel du patch.
+          - Validation de la mise à jour par les SHA-256 des quatre fichiers du pack fourni ; les anciens marqueurs seuls ne suffisent plus.
+          - Aucune réinstallation nécessaire. Relancer le patch, puis Jouer après son message de réussite.
           
           - Lancement des fichiers du CD explicitement sur X:, comme dans le sélecteur.
           - Bouton Diagnostic : rapport local du dernier lancement, copiable après une erreur.
@@ -72,4 +79,5 @@ jobs:
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.2 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.3 — essai Android" --notes-file /tmp/retroiso-release-notes.md --prerelease
+

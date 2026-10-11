@@ -73,7 +73,10 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val systemReg = File(wineDir, "system.reg")
         if (systemReg.isFile) {
             WineRegistryEditor(systemReg).use { registry ->
+                registry.removeKey(GangstersPatch107.REGISTRY_KEY, true)
                 registry.removeKey("Software\\Gangsters2g", true)
+                registry.removeKey(GangstersPatch107.REGISTRY_KEY_32, true)
+                registry.removeKey("Software\\WOW6432Node\\Gangsters2", true)
                 registry.removeKey("Software\\Wow6432Node\\Gangsters2g", true)
                 registry.removeKey("Software\\WOW6432Node\\Gangsters2g", true)
             }
@@ -83,6 +86,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         val userReg = File(wineDir, "user.reg")
         if (userReg.isFile) {
             WineRegistryEditor(userReg).use { registry ->
+                registry.removeKey(GangstersPatch107.REGISTRY_KEY, true)
                 registry.removeKey("Software\\Gangsters2g", true)
             }
         }
@@ -276,7 +280,7 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
         // WineRegistryEditor edits the on-disk registry directly: there is no
         // automatic WOW64 redirection. Populate both views, preserving VERSION.
-        val logicalKeys = listOf("Software\\Gangsters2g", "Software\\Wow6432Node\\Gangsters2g")
+        val logicalKeys = listOf(GangstersPatch107.REGISTRY_KEY, GangstersPatch107.REGISTRY_KEY_32)
         // The file editor matches text, whereas Windows registry keys are case-insensitive.
         // Reuse existing spelling and repair any old duplicate instead of shadowing it.
         val existingKeys = systemReg.useLines { lines ->
@@ -306,7 +310,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
             "Jeu cible: " + programDosPath(prepared, gameExe),
             "Taille EXE cible: " + gameExe.length(),
             "SHA256 avant patch: " + gameHash,
+            "Cle 64 bits: " + GangstersPatch107.REGISTRY_KEY,
             "PATH 64 bits verifie: " + windowsInstallDir,
+            "Cle 32 bits: " + GangstersPatch107.REGISTRY_KEY_32,
             "PATH 32 bits verifie: " + windowsInstallDir,
             "VERSION: conservee, non forcee par Retro ISO"
         ).joinToString("\n")
@@ -329,72 +335,9 @@ class EmbeddedWinlatorBackend(private val context: Context) {
 
     fun isPatchApplied(prepared: PreparedContainer): Boolean {
         val exe = findBaseGangstersExecutable(prepared) ?: return false
-        val stateDir = patchStateDir(prepared)
-        val appliedMarker = File(stateDir, "patch107.applied")
-        if (appliedMarker.isFile) return true
-
-        // The Hothouse updater writes its release notes / patch language data
-        // only after a successful update. This also lets an already-patched
-        // installation created by an older Retro ISO build be recognized.
-        val gameDir = exe.parentFile
-        val updaterArtifacts = listOf(
-            File(gameDir, "Update.txt"),
-            File(gameDir, "language/patch1.lan"),
-            File(gameDir, "Language/patch1.lan")
-        )
-        if (updaterArtifacts.any { it.isFile }) {
-            appliedMarker.writeText("updater-artifact")
-            return true
-        }
-
-        // Most robust signal: the official updater modifies Gangsters2.exe.
-        // Compare it with the executable hash captured immediately before
-        // launching the updater. This avoids WoW64 registry redirection quirks.
-        val preHashFile = File(stateDir, "prepatch.sha256")
-        if (preHashFile.isFile) {
-            val before = preHashFile.readText().trim()
-            val after = runCatching { sha256(exe) }.getOrNull()
-            if (!after.isNullOrBlank() && before.isNotBlank() && after != before) {
-                appliedMarker.writeText(after)
-                return true
-            }
-        }
-
-        val systemReg = File(prepared.rootDir, ".wine/system.reg")
-        if (!systemReg.isFile) return false
-
-        val candidateKeys = listOf(
-            "Software\\Gangsters2g",
-            "Software\\Wow6432Node\\Gangsters2g",
-            "Software\\WOW6432Node\\Gangsters2g"
-        )
-
-        WineRegistryEditor(systemReg).use { registry ->
-            for (key in candidateKeys) {
-                try {
-                    if (registry.getDwordValue(key, "VERSION") != null) {
-                        appliedMarker.writeText("registry-dword")
-                        return true
-                    }
-                } catch (_: Exception) {}
-                try {
-                    val value = registry.getStringValue(key, "VERSION")
-                    if (!value.isNullOrBlank()) {
-                        appliedMarker.writeText("registry-string")
-                        return true
-                    }
-                } catch (_: Exception) {}
-            }
-        }
-
-        val text = systemReg.readText()
-        val keyPresent = text.contains("Gangsters2g", ignoreCase = true)
-        val versionPresent = Regex("""(?im)^"VERSION"=(?:dword:[0-9a-f]+|".*")""").containsMatchIn(text)
-        if (keyPresent && versionPresent) {
-            appliedMarker.writeText("registry-text")
-            return true
-        }
-        return false
+        // A registry value, changed EXE, old marker or a single file can survive
+        // a failed/partial updater run. Validate all four known payloads instead.
+        return GangstersPatch107.isApplied(exe.parentFile)
     }
 
     private fun installCompatibilityDlls(prepared: PreparedContainer) {
@@ -799,3 +742,4 @@ class EmbeddedWinlatorBackend(private val context: Context) {
         container.saveData()
     }
 }
+

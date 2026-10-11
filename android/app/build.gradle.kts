@@ -12,8 +12,8 @@ android {
         applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
-        versionCode = 8
-        versionName = "0.5.2-native-patch-preparation"
+        versionCode = 9
+        versionName = "0.5.3-native-patch-key"
         ndk {
             abiFilters += "arm64-v8a"
         }
@@ -62,3 +62,4 @@ dependencies {
     implementation("org.apache.commons:commons-compress:1.20")
     implementation("androidx.lifecycle:lifecycle-process:2.5.1")
 }
+
