@@ -12,8 +12,8 @@ android {
         applicationId = "com.retroiso"
         minSdk = 30
         targetSdk = 28
-        versionCode = 12
-        versionName = "0.5.6-touch-controls"
+        versionCode = 13
+        versionName = "0.5.7-map-scroll"
         ndk {
             abiFilters += "arm64-v8a"
         }
