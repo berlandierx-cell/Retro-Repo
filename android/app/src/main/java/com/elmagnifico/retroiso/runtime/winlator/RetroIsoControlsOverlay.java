@@ -34,6 +34,7 @@ import com.winlator.xserver.XServer;
 public final class RetroIsoControlsOverlay {
     private static final String PREFERENCES = "retroiso_touch_controls";
     private static final String DIRECT_MODE_KEY = "gangsters2_direct_mode";
+    private static final String SELECTION_DRAG_KEY = "gangsters2_selection_drag";
 
     private final Activity activity;
     private final XServer server;
@@ -42,12 +43,15 @@ public final class RetroIsoControlsOverlay {
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final View directSurface;
     private final TextView modeButton;
+    private final TextView dragModeButton;
     private final int touchSlop;
 
     private boolean directMode;
     private boolean tracking;
     private boolean dragging;
     private boolean longPressed;
+    private boolean selectionDragMode;
+    private Pointer.Button heldDragButton;
     private float downX;
     private float downY;
     private int startMouseX;
@@ -71,9 +75,11 @@ public final class RetroIsoControlsOverlay {
             FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
 
         LinearLayout arrows = createPanel(168);
-        arrows.addView(arrowRow(null, XKeycode.KEY_UP, null));
-        arrows.addView(arrowRow(XKeycode.KEY_LEFT, null, XKeycode.KEY_RIGHT));
-        arrows.addView(arrowRow(null, XKeycode.KEY_DOWN, null));
+        // Gangsters 2 scrolls the city with NUMPAD keys, NOT arrow keys.
+        // See original game manual: KP_8 / KP_4 / KP_6 / KP_2.
+        arrows.addView(arrowRow(null, XKeycode.KEY_KP_8, null));
+        arrows.addView(arrowRow(XKeycode.KEY_KP_4, null, XKeycode.KEY_KP_6));
+        arrows.addView(arrowRow(null, XKeycode.KEY_KP_2, null));
         FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(dp(168),
             FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL);
         leftParams.leftMargin = dp(6);
@@ -83,6 +89,12 @@ public final class RetroIsoControlsOverlay {
         modeButton = actionButton("DIRECT", actions);
         modeButton.setContentDescription("Basculer entre toucher direct et souris classique");
         modeButton.setOnClickListener(v -> setDirectMode(!directMode));
+
+        // Default gesture = right-button drag (pan city). A separate toggle
+        // retains left-button drag for bounding-box character selection.
+        dragModeButton = actionButton("Glisser: carte", actions);
+        dragModeButton.setContentDescription("Choisir glissement de carte ou sélection de zone");
+        dragModeButton.setOnClickListener(v -> setSelectionDragMode(!selectionDragMode));
 
         addAction(actions, "Clic droit", () -> pulsePointer(Pointer.Button.BUTTON_RIGHT));
         addAction(actions, "Entrée", () -> pulseKey(XKeycode.KEY_ENTER));
@@ -97,6 +109,8 @@ public final class RetroIsoControlsOverlay {
         rightParams.rightMargin = dp(6);
         root.addView(actions, rightParams);
 
+        setSelectionDragMode(activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            .getBoolean(SELECTION_DRAG_KEY, false));
         setDirectMode(activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .getBoolean(DIRECT_MODE_KEY, true));
     }
@@ -144,16 +158,16 @@ public final class RetroIsoControlsOverlay {
         }
         String glyph;
         switch (key) {
-            case KEY_UP: glyph = "↑"; break;
-            case KEY_DOWN: glyph = "↓"; break;
-            case KEY_LEFT: glyph = "←"; break;
+            case KEY_KP_8: glyph = "↑"; break;
+            case KEY_KP_2: glyph = "↓"; break;
+            case KEY_KP_4: glyph = "←"; break;
             default: glyph = "→"; break;
         }
         TextView view = button(glyph);
         view.setTextSize(24);
-        view.setContentDescription("Flèche " + (key == XKeycode.KEY_UP ? "haut" :
-            key == XKeycode.KEY_DOWN ? "bas" :
-            key == XKeycode.KEY_LEFT ? "gauche" : "droite"));
+        view.setContentDescription("Déplacer la carte vers " + (key == XKeycode.KEY_KP_8 ? "le haut" :
+            key == XKeycode.KEY_KP_2 ? "le bas" :
+            key == XKeycode.KEY_KP_4 ? "la gauche" : "la droite"));
         view.setOnTouchListener((v, event) -> {
             switch (event.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
@@ -222,12 +236,23 @@ public final class RetroIsoControlsOverlay {
         touchpadView.setEnabled(true);
     }
 
+    private void setSelectionDragMode(boolean enabled) {
+        cancelGesture();
+        selectionDragMode = enabled;
+        dragModeButton.setText(enabled ? "Glisser: sélection" : "Glisser: carte");
+        dragModeButton.setBackground(background(enabled ? 0xD75E4B28 : 0xDA303B4B,
+            enabled ? 0xFFFFD69A : 0xFFAABACA));
+        activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            .edit().putBoolean(SELECTION_DRAG_KEY, enabled).apply();
+    }
+
     private void cancelGesture() {
         if (rightClickLongPress != null) {
             handler.removeCallbacks(rightClickLongPress);
             rightClickLongPress = null;
         }
-        if (dragging) server.injectPointerButtonRelease(Pointer.Button.BUTTON_LEFT);
+        if (heldDragButton != null) server.injectPointerButtonRelease(heldDragButton);
+        heldDragButton = null;
         dragging = false;
         tracking = false;
         longPressed = false;
@@ -273,10 +298,13 @@ public final class RetroIsoControlsOverlay {
                 startMouseX = point[0];
                 startMouseY = point[1];
                 rightClickLongPress = () -> {
-                    if (tracking && !dragging) {
+                    if (tracking && !dragging && heldDragButton == null) {
                         longPressed = true;
                         server.injectPointerMove(startMouseX, startMouseY);
-                        pulsePointer(Pointer.Button.BUTTON_RIGHT);
+                        // Keep RMB held until finger release. Allows long-press
+                        // and drag to pan without a synthetic early release.
+                        heldDragButton = Pointer.Button.BUTTON_RIGHT;
+                        server.injectPointerButtonPress(heldDragButton);
                     }
                 };
                 handler.postDelayed(rightClickLongPress,
@@ -285,33 +313,35 @@ public final class RetroIsoControlsOverlay {
             }
             case MotionEvent.ACTION_MOVE: {
                 if (!tracking || event.getPointerCount() != 1) return true;
-                int[] point = pointerPosition(event.getX(), event.getY(), true);
+                // Never clamp an active drag into the edge of the game.
+                // Leaving the 4:3 viewport must not trigger runaway scrolling.
+                int[] point = pointerPosition(event.getX(), event.getY(), false);
                 if (point == null) return true;
                 if (!longPressed && !dragging &&
                     Math.hypot(event.getX() - downX, event.getY() - downY) > touchSlop) {
                     if (rightClickLongPress != null) handler.removeCallbacks(rightClickLongPress);
                     server.injectPointerMove(startMouseX, startMouseY);
-                    server.injectPointerButtonPress(Pointer.Button.BUTTON_LEFT);
+                    // Gangsters 2 pans the city with RIGHT mouse held.
+                    // LEFT mouse drag selects several characters instead.
+                    heldDragButton = selectionDragMode
+                        ? Pointer.Button.BUTTON_LEFT : Pointer.Button.BUTTON_RIGHT;
+                    server.injectPointerButtonPress(heldDragButton);
                     dragging = true;
                 }
-                if (dragging) server.injectPointerMove(point[0], point[1]);
+                if (heldDragButton != null) server.injectPointerMove(point[0], point[1]);
                 return true;
             }
             case MotionEvent.ACTION_UP: {
                 if (!tracking) return true;
-                if (dragging) {
-                    int[] point = pointerPosition(event.getX(), event.getY(), true);
-                    if (point != null) server.injectPointerMove(point[0], point[1]);
-                    cancelGesture();
-                }
-                else {
-                    boolean wasLongPress = longPressed;
-                    int[] point = pointerPosition(event.getX(), event.getY(), false);
-                    cancelGesture();
-                    if (!wasLongPress && point != null) {
-                        server.injectPointerMove(point[0], point[1]);
-                        pulsePointer(Pointer.Button.BUTTON_LEFT);
-                    }
+                boolean wasLongPress = longPressed;
+                boolean wasDragging = heldDragButton != null;
+                int[] point = pointerPosition(event.getX(), event.getY(), false);
+                if (wasDragging && point != null)
+                    server.injectPointerMove(point[0], point[1]);
+                cancelGesture();
+                if (!wasLongPress && !wasDragging && point != null) {
+                    server.injectPointerMove(point[0], point[1]);
+                    pulsePointer(Pointer.Button.BUTTON_LEFT);
                 }
                 return true;
             }
