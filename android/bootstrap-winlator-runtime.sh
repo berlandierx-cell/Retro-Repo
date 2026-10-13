@@ -446,6 +446,39 @@ destroy = '''    protected void onDestroy() {
 if s.count(destroy_anchor) != 1:
     raise SystemExit("Retro ISO overlay lifecycle destroy patch point not found")
 s = s.replace(destroy_anchor, destroy, 1)
+
+pause_anchor = '''    public void onPause() {
+        super.onPause();'''
+pause_patch = '''    public void onPause() {
+        if (retroIsoDiagnostics != null) retroIsoDiagnostics.append("RETROISO_LIFECYCLE: onPause");
+        super.onPause();'''
+if s.count(pause_anchor) != 1:
+    raise SystemExit("Retro ISO pause diagnostic patch point not found")
+s = s.replace(pause_anchor, pause_patch, 1)
+
+resume_anchor = '''    public void onResume() {
+        super.onResume();'''
+resume_patch = '''    public void onResume() {
+        super.onResume();
+        if (retroIsoDiagnostics != null) retroIsoDiagnostics.append("RETROISO_LIFECYCLE: onResume");'''
+if s.count(resume_anchor) != 1:
+    raise SystemExit("Retro ISO resume diagnostic patch point not found")
+s = s.replace(resume_anchor, resume_patch, 1)
+
+memory_anchor = '''    @Override
+    protected void onDestroy() {'''
+memory_patch = '''    @Override
+    public void onTrimMemory(int level) {
+        super.onTrimMemory(level);
+        if (retroIsoDiagnostics != null)
+            retroIsoDiagnostics.append("RETROISO_LIFECYCLE: onTrimMemory " + level);
+    }
+
+    @Override
+    protected void onDestroy() {'''
+if s.count(memory_anchor) != 1:
+    raise SystemExit("Retro ISO low-memory diagnostic patch point not found")
+s = s.replace(memory_anchor, memory_patch, 1)
 p.write_text(s)
 PY
 
