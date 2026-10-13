@@ -11,7 +11,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
-import com.elmagnifico.retroiso.MainActivity;
+import com.winlator.XServerDisplayActivity;
 
 /**
  * Foreground notification while the user is playing an emulated Windows game.
@@ -42,8 +42,13 @@ public final class RetroIsoGameSessionService extends Service {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        Intent open = new Intent(this, MainActivity.class);
-        open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        // Return to the active game instead of CLEAR_TOP, which would
+        // destroy the game display and unexpectedly reveal the games menu.
+        Intent open = new Intent(this, XServerDisplayActivity.class);
+        open.addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
+        if (intent != null && intent.getExtras() != null) {
+            open.putExtras(intent.getExtras());
+        }
         int pendingFlags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
             pendingFlags |= PendingIntent.FLAG_IMMUTABLE;
