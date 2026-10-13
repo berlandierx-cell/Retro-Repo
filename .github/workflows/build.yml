@@ -25,6 +25,27 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      - name: Installer la signature Android permanente
+        env:
+          RETROISO_SIGNING_BUNDLE: ${{ secrets.RETROISO_SIGNING_BUNDLE }}
+        run: |
+          set -euo pipefail
+          if [ -z "$RETROISO_SIGNING_BUNDLE" ]; then
+            echo "::error title=Signature permanente manquante::Ajoute le secret RETROISO_SIGNING_BUNDLE dans Settings > Secrets and variables > Actions. Aucun APK instable ne sera publié."
+            exit 1
+          fi
+          SIGN_DIR="$RUNNER_TEMP/retroiso-signing"
+          mkdir -p "$SIGN_DIR"
+          printf '%s' "$RETROISO_SIGNING_BUNDLE" | base64 --decode > "$RUNNER_TEMP/retroiso-signing.tgz"
+          tar -xzf "$RUNNER_TEMP/retroiso-signing.tgz" -C "$SIGN_DIR"
+          test -s "$SIGN_DIR/retroiso.jks"
+          test -s "$SIGN_DIR/password.txt"
+          chmod 600 "$SIGN_DIR/retroiso.jks" "$SIGN_DIR/password.txt"
+          keytool -list -keystore "$SIGN_DIR/retroiso.jks" -storepass:file "$SIGN_DIR/password.txt" -alias retroiso >/dev/null
+          echo "RETROISO_KEYSTORE_PATH=$SIGN_DIR/retroiso.jks" >> "$GITHUB_ENV"
+          echo "RETROISO_SIGNING_PASSWORD_FILE=$SIGN_DIR/password.txt" >> "$GITHUB_ENV"
+          echo "Signature stable validée, certificat conservé en secret GitHub."
+
       - name: Verify patch detection
         run: |
           mkdir -p /tmp/retroiso-patch-tests
@@ -55,6 +76,16 @@ jobs:
       - name: Build Retro ISO with embedded runtime
         run: gradle assembleDebug --no-daemon
 
+      - name: Vérifier la signature de l'APK générée
+        run: |
+          set -euo pipefail
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
+          test -n "$APK_SIGNER"
+          "$APK_SIGNER" verify --print-certs "$APK" | grep -E 'Signer #1 certificate SHA-256 digest'
+          echo "APK vérifiée avec sa signature persistante."
+
       - name: Publier l'APK de test sans supprimer les versions précédentes
         env:
           GH_TOKEN: "${{ github.token }}"
@@ -62,6 +93,10 @@ jobs:
           TAG="apk-${GITHUB_RUN_ID}"
           cat > /tmp/retroiso-release-notes.md <<'NOTES'
           APK Android avec Winlator/Wine/Box64 intégré.
+          
+          - PREMIÈRE INSTALLATION : si une APK précédente est signée avec une clé différente, il faut désinstaller l'ancienne version. Toutes ses données locales sont alors supprimées.
+          - Ensuite, les nouvelles APK conserveront la même signature privée via GitHub Actions Secrets (RETROISO_SIGNING_BUNDLE).
+          - L'APK est publiée seulement après vérification de sa signature.
           
           - Gangsters 2 : contrôles tactiles flottants dans les bandes latérales : flèches, clic droit, Entrée, Échap, clic gauche, double-clic.
           - Nouveau bouton Couleurs sur la gauche : correction rouge/bleu de l'image DirectDraw via le shader, activée par défaut et réversible sans quitter le jeu.
@@ -100,5 +135,5 @@ jobs:
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.9 — couleurs et stabilité" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.6.0 — signature Android permanente" --notes-file /tmp/retroiso-release-notes.md --prerelease
 
