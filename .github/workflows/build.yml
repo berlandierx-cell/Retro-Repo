@@ -83,8 +83,28 @@ jobs:
           test -s "$APK"
           APK_SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner -type f | sort -V | tail -1)
           test -n "$APK_SIGNER"
-          "$APK_SIGNER" verify --print-certs "$APK" | grep -E 'Signer #1 certificate SHA-256 digest'
-          echo "APK vérifiée avec sa signature persistante."
+          # Validate APK integrity AND match the exact public certificate from
+          # the persistent private key. Do not publish on a mismatched signer.
+          APK_REPORT=$("$APK_SIGNER" verify --verbose --print-certs "$APK") || {
+            echo "$APK_REPORT"
+            echo "::error::Échec de la vérification cryptographique de l'APK"
+            exit 1
+          }
+          echo "$APK_REPORT" | grep -i -E 'verified using|certificate SHA-256' || true
+          CERT_EXPECTED=$(keytool -exportcert -alias retroiso \
+            -keystore "$RETROISO_KEYSTORE_PATH" \
+            -storepass:file "$RETROISO_SIGNING_PASSWORD_FILE" 2>/dev/null \
+            | sha256sum | awk '{print $1}')
+          CERT_ACTUAL=$(printf '%s\n' "$APK_REPORT" \
+            | sed -nE 's/.*certificate SHA-256 digest: ([0-9A-Fa-f]+).*/\1/p' \
+            | head -n 1 | tr '[:upper:]' '[:lower:]')
+          if [ -z "$CERT_EXPECTED" ] || [ -z "$CERT_ACTUAL" ] || [ "$CERT_ACTUAL" != "$CERT_EXPECTED" ]; then
+            echo "::error::Le certificat de l'APK ne correspond pas à la signature permanente."
+            echo "Empreinte attendue : $CERT_EXPECTED"
+            echo "Empreinte APK : $CERT_ACTUAL"
+            exit 1
+          fi
+          echo "APK vérifiée avec la même clé privée persistante : $CERT_ACTUAL"
 
       - name: Publier l'APK de test sans supprimer les versions précédentes
         env:
