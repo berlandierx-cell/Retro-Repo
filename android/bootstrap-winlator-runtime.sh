@@ -406,13 +406,31 @@ new = '''        if (MainActivity.DEBUG_MODE) rootView.addView(AppUtils.createDe
         // Retro ISO's optional game-specific overlay must be on top of
         // TouchpadView and InputControlsView to receive accurate tap positions.
         if (getIntent().getBooleanExtra("retroiso_touch_controls", false)) {
-            new com.elmagnifico.retroiso.runtime.winlator.RetroIsoControlsOverlay(
+            retroIsoControlsOverlay = new com.elmagnifico.retroiso.runtime.winlator.RetroIsoControlsOverlay(
                 this, rootView, xServer, xServerView, touchpadView);
         }
         AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);'''
 if s.count(old) != 1:
     raise SystemExit("Retro ISO touch controls patch point not found")
-p.write_text(s.replace(old, new, 1))
+s = s.replace(old, new, 1)
+
+field_anchor = '''    private String screenEffectProfile;'''
+field = '''    private String screenEffectProfile;
+    // Keep the overlay alive so held keyboard modifiers can be released on exit.
+    private com.elmagnifico.retroiso.runtime.winlator.RetroIsoControlsOverlay retroIsoControlsOverlay;'''
+if s.count(field_anchor) != 1:
+    raise SystemExit("Retro ISO overlay lifecycle field patch point not found")
+s = s.replace(field_anchor, field, 1)
+
+destroy_anchor = '''    protected void onDestroy() {
+        winHandler.stop();'''
+destroy = '''    protected void onDestroy() {
+        if (retroIsoControlsOverlay != null) retroIsoControlsOverlay.releaseHeldKeys();
+        winHandler.stop();'''
+if s.count(destroy_anchor) != 1:
+    raise SystemExit("Retro ISO overlay lifecycle destroy patch point not found")
+s = s.replace(destroy_anchor, destroy, 1)
+p.write_text(s)
 PY
 
 echo "Winlator sources prepared at $RUNTIME_DIR ($PIN) with Retro ISO diagnostics"
