@@ -64,6 +64,9 @@ jobs:
           APK Android avec Winlator/Wine/Box64 intégré.
           
           - Gangsters 2 : contrôles tactiles flottants dans les bandes latérales : flèches, clic droit, Entrée, Échap, clic gauche, double-clic.
+          - Nouveau bouton MAJ (Shift) sur la droite de Gangsters 2 : appui court pour verrouiller/déverrouiller ; appui prolongé pour maintenir uniquement le temps du contact.
+          - MAJ ✓ apparaît en vert quand Shift est verrouillée ; MAJ ↓ lors d'un maintien temporaire.
+          - Libération de Shift à la fermeture du jeu ; aucune modification des fichiers ou des sauvegardes.
           - Flèches gauche : véritables touches de défilement de carte du pavé numérique 8/4/6/2 (conformément au manuel Gangsters 2).
           - Mode DIRECT : un toucher = clic gauche, appui long = clic droit maintenu, glissement = clic droit maintenu pour faire défiler la carte.
           - Glisser: sélection : bascule le glissement en clic gauche maintenu pour encadrer plusieurs personnages.
@@ -94,5 +97,5 @@ jobs:
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.7 — défilement de carte" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.8 — touche MAJ verrouillable" --notes-file /tmp/retroiso-release-notes.md --prerelease
 
