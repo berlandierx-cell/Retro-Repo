@@ -8,3 +8,9 @@ android/**/build/
 *.keystore
 client_secret.json
 token.json
+
+# Private APK signing keys and secret bundles must never enter Git.
+*.jks
+*.p12
+retroiso-github-secret.txt
+retroiso-signing-private/
