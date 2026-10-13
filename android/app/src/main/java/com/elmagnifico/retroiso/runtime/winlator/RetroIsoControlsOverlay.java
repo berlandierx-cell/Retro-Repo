@@ -44,6 +44,7 @@ public final class RetroIsoControlsOverlay {
     private final View directSurface;
     private final TextView modeButton;
     private final TextView dragModeButton;
+    private final TextView shiftButton;
     private final int touchSlop;
 
     private boolean directMode;
@@ -51,6 +52,11 @@ public final class RetroIsoControlsOverlay {
     private boolean dragging;
     private boolean longPressed;
     private boolean selectionDragMode;
+    // Shift is a modifier, not a key pulse. It can remain pressed while
+    // the user taps the game or other controls. Never persist across launches.
+    private boolean shiftLocked;
+    private boolean shiftTouchActive;
+    private long shiftTouchStart;
     private Pointer.Button heldDragButton;
     private float downX;
     private float downY;
@@ -99,6 +105,10 @@ public final class RetroIsoControlsOverlay {
         addAction(actions, "Clic droit", () -> pulsePointer(Pointer.Button.BUTTON_RIGHT));
         addAction(actions, "Entrée", () -> pulseKey(XKeycode.KEY_ENTER));
         addAction(actions, "Échap", () -> pulseKey(XKeycode.KEY_ESC));
+        shiftButton = actionButton("MAJ", actions);
+        shiftButton.setContentDescription("MAJ : appui court pour verrouiller, appui long pour maintenir temporairement");
+        shiftButton.setOnTouchListener((v, event) -> onShiftTouch(event));
+        updateShiftAppearance();
         addAction(actions, "Clic gauche", () -> pulsePointer(Pointer.Button.BUTTON_LEFT));
         addAction(actions, "Double clic", () -> {
             pulsePointer(Pointer.Button.BUTTON_LEFT);
@@ -201,9 +211,10 @@ public final class RetroIsoControlsOverlay {
 
     private TextView actionButton(String title, LinearLayout panel) {
         TextView view = button(title);
+        // Keep all action buttons visible in landscape after adding MAJ.
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(42));
-        lp.bottomMargin = dp(5);
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(38));
+        lp.bottomMargin = dp(3);
         panel.addView(view, lp);
         return view;
     }
@@ -220,6 +231,62 @@ public final class RetroIsoControlsOverlay {
     private void pulseKey(XKeycode key) {
         server.injectKeyPress(key);
         handler.postDelayed(() -> server.injectKeyRelease(key), 85);
+    }
+
+    /**
+     * Short tap: switch Shift lock on/off.
+     * Long press: press Shift while the finger stays on the key, then
+     * release on finger-up (unless Shift was already locked).
+     *
+     * Injecting on ACTION_DOWN permits multi-touch Shift + game action.
+     * No delayed key pulse: X11/Wine sees a genuine held modifier.
+     */
+    private boolean onShiftTouch(MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                shiftTouchActive = true;
+                shiftTouchStart = event.getEventTime();
+                if (!shiftLocked) server.injectKeyPress(XKeycode.KEY_SHIFT_L);
+                updateShiftAppearance();
+                return true;
+            case MotionEvent.ACTION_UP:
+                if (!shiftTouchActive) return true;
+                shiftTouchActive = false;
+                boolean shortTap = event.getEventTime() - shiftTouchStart <
+                    ViewConfiguration.getLongPressTimeout();
+                if (shortTap) shiftLocked = !shiftLocked;
+                if (!shiftLocked) server.injectKeyRelease(XKeycode.KEY_SHIFT_L);
+                updateShiftAppearance();
+                return true;
+            case MotionEvent.ACTION_CANCEL:
+                shiftTouchActive = false;
+                if (!shiftLocked) server.injectKeyRelease(XKeycode.KEY_SHIFT_L);
+                updateShiftAppearance();
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    private void updateShiftAppearance() {
+        if (shiftButton == null) return;
+        shiftButton.setText(shiftLocked ? "MAJ ✓" : shiftTouchActive ? "MAJ ↓" : "MAJ");
+        shiftButton.setBackground(background(
+            shiftLocked ? 0xE52B6653 : shiftTouchActive ? 0xDA79602E : 0xDA303B4B,
+            shiftLocked ? 0xFF81E1BC : shiftTouchActive ? 0xFFFFD69A : 0xFFAABACA));
+        shiftButton.setContentDescription(
+            shiftLocked ? "MAJ verrouillée : toucher pour désactiver"
+            : shiftTouchActive ? "MAJ maintenue" : "MAJ désactivée : toucher pour verrouiller");
+    }
+
+    /** Called by XServerDisplayActivity before stopping Wine. */
+    public void releaseHeldKeys() {
+        cancelGesture();
+        if (shiftTouchActive || shiftLocked)
+            server.injectKeyRelease(XKeycode.KEY_SHIFT_L);
+        shiftTouchActive = false;
+        shiftLocked = false;
+        updateShiftAppearance();
     }
 
     private void setDirectMode(boolean enabled) {
