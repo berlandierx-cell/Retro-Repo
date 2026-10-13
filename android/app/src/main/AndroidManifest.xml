@@ -11,6 +11,7 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application
@@ -59,12 +60,18 @@
             android:theme="@style/AppThemeDark"
             android:screenOrientation="sensor" />
 
+        <!-- A game-session FGS protects the Wine process against routine
+             background reclaim. This is not music/video playback. -->
         <service
-            android:name="com.winlator.services.ForegroundService"
+            android:name="com.elmagnifico.retroiso.runtime.winlator.RetroIsoGameSessionService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="mediaPlayback"
-            android:stopWithTask="false" />
+            android:foregroundServiceType="specialUse"
+            android:stopWithTask="true">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Ongoing user-visible legacy game session, kept during temporary app switching" />
+        </service>
 
         <provider
             android:name="androidx.core.content.FileProvider"
