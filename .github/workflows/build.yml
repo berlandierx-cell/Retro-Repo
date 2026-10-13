@@ -64,6 +64,9 @@ jobs:
           APK Android avec Winlator/Wine/Box64 intégré.
           
           - Gangsters 2 : contrôles tactiles flottants dans les bandes latérales : flèches, clic droit, Entrée, Échap, clic gauche, double-clic.
+          - Nouveau bouton Couleurs sur la gauche : correction rouge/bleu de l'image DirectDraw via le shader, activée par défaut et réversible sans quitter le jeu.
+          - Nouvelle session de jeu avec notification Android (service de premier plan « specialUse »), pour réduire les fermetures lors d'un changement d'application ; ne garantit pas la survie en cas de manque de mémoire.
+          - Traces Android sur pause/reprise et pression mémoire ajoutées au diagnostic pour mieux identifier les retours au menu.
           - Nouveau bouton MAJ (Shift) sur la droite de Gangsters 2 : appui court pour verrouiller/déverrouiller ; appui prolongé pour maintenir uniquement le temps du contact.
           - MAJ ✓ apparaît en vert quand Shift est verrouillée ; MAJ ↓ lors d'un maintien temporaire.
           - Libération de Shift à la fermeture du jeu ; aucune modification des fichiers ou des sauvegardes.
@@ -97,5 +100,5 @@ jobs:
           
           Compilation vérifiée par GitHub Actions. Installation et performances de Gangsters 2 sur Pixel 9a à tester : ce téléchargement n'est pas une validation du jeu.
           NOTES
-          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.8 — touche MAJ verrouillable" --notes-file /tmp/retroiso-release-notes.md --prerelease
+          gh release create "$TAG" app/build/outputs/apk/debug/app-debug.apk --target "$GITHUB_SHA" --title "Retro ISO 0.5.9 — couleurs et stabilité" --notes-file /tmp/retroiso-release-notes.md --prerelease
 
