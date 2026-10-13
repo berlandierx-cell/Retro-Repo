@@ -29,7 +29,7 @@ android {
         signingConfigs {
             create("retroIsoStable") {
                 storeFile = file(retroIsoKeystore)
-                val password = java.io.File(retroIsoPasswordFile).readText().trim()
+                val password = file(retroIsoPasswordFile).readText().trim()
                 storePassword = password
                 keyAlias = "retroiso"
                 keyPassword = password
