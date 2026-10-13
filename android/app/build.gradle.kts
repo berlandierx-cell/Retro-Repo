@@ -19,6 +19,30 @@ android {
         }
     }
 
+    // A stable, private keystore is injected by GitHub Actions from the
+    // RETROISO_SIGNING_BUNDLE repository secret. Do not commit the keystore.
+    // Debug builds are deliberately signed with this same certificate so a
+    // new Actions runner produces an Android-installable upgrade.
+    val retroIsoKeystore = System.getenv("RETROISO_KEYSTORE_PATH")
+    val retroIsoPasswordFile = System.getenv("RETROISO_SIGNING_PASSWORD_FILE")
+    if (!retroIsoKeystore.isNullOrBlank() && !retroIsoPasswordFile.isNullOrBlank()) {
+        signingConfigs {
+            create("retroIsoStable") {
+                storeFile = file(retroIsoKeystore)
+                val password = java.io.File(retroIsoPasswordFile).readText().trim()
+                storePassword = password
+                keyAlias = "retroiso"
+                keyPassword = password
+                storeType = "PKCS12"
+            }
+        }
+        buildTypes {
+            getByName("debug") {
+                signingConfig = signingConfigs.getByName("retroIsoStable")
+            }
+        }
+    }
+
     sourceSets {
         getByName("main") {
             java.srcDir("../.runtime/winlator/app/src/main/java")
