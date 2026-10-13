@@ -35,6 +35,7 @@ public final class RetroIsoControlsOverlay {
     private static final String PREFERENCES = "retroiso_touch_controls";
     private static final String DIRECT_MODE_KEY = "gangsters2_direct_mode";
     private static final String SELECTION_DRAG_KEY = "gangsters2_selection_drag";
+    private static final String COLOR_CORRECTION_KEY = "gangsters2_swap_red_blue";
 
     private final Activity activity;
     private final XServer server;
@@ -45,6 +46,7 @@ public final class RetroIsoControlsOverlay {
     private final TextView modeButton;
     private final TextView dragModeButton;
     private final TextView shiftButton;
+    private final TextView colorsButton;
     private final int touchSlop;
 
     private boolean directMode;
@@ -54,6 +56,7 @@ public final class RetroIsoControlsOverlay {
     private boolean selectionDragMode;
     // Shift is a modifier, not a key pulse. It can remain pressed while
     // the user taps the game or other controls. Never persist across launches.
+    private boolean swapRedBlue;
     private boolean shiftLocked;
     private boolean shiftTouchActive;
     private long shiftTouchStart;
@@ -86,6 +89,9 @@ public final class RetroIsoControlsOverlay {
         arrows.addView(arrowRow(null, XKeycode.KEY_KP_8, null));
         arrows.addView(arrowRow(XKeycode.KEY_KP_4, null, XKeycode.KEY_KP_6));
         arrows.addView(arrowRow(null, XKeycode.KEY_KP_2, null));
+        colorsButton = actionButton("Couleurs", arrows);
+        colorsButton.setContentDescription("Basculer entre couleurs corrigées et couleurs originales");
+        colorsButton.setOnClickListener(v -> setColorCorrection(!swapRedBlue));
         FrameLayout.LayoutParams leftParams = new FrameLayout.LayoutParams(dp(168),
             FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.START | Gravity.CENTER_VERTICAL);
         leftParams.leftMargin = dp(6);
@@ -119,6 +125,8 @@ public final class RetroIsoControlsOverlay {
         rightParams.rightMargin = dp(6);
         root.addView(actions, rightParams);
 
+        setColorCorrection(activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            .getBoolean(COLOR_CORRECTION_KEY, true));
         setSelectionDragMode(activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
             .getBoolean(SELECTION_DRAG_KEY, false));
         setDirectMode(activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
@@ -301,6 +309,22 @@ public final class RetroIsoControlsOverlay {
         // In mouse mode the original Winlator TouchpadView receives events.
         // Do not change the engine's relativeMouseMovement setting or sensitivity.
         touchpadView.setEnabled(true);
+    }
+
+    /**
+     * The recorded VirGL scene has reversed red/blue channels in some
+     * DirectDraw surfaces. This correction only swaps channels in the Android
+     * game renderer; the emulated framebuffer, UI buttons, Wine prefix and
+     * actual game data stay unchanged. A toggle keeps it reversible.
+     */
+    private void setColorCorrection(boolean enabled) {
+        swapRedBlue = enabled;
+        colorsButton.setText(enabled ? "Couleurs ✓" : "Couleurs orig.");
+        colorsButton.setBackground(background(enabled ? 0xE52B6653 : 0xDA303B4B,
+            enabled ? 0xFF81E1BC : 0xFFAABACA));
+        gameView.getRenderer().setRetroIsoSwapRedBlue(enabled);
+        activity.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
+            .edit().putBoolean(COLOR_CORRECTION_KEY, enabled).apply();
     }
 
     private void setSelectionDragMode(boolean enabled) {
