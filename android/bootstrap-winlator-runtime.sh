@@ -408,6 +408,18 @@ new = '''        if (MainActivity.DEBUG_MODE) rootView.addView(AppUtils.createDe
         if (getIntent().getBooleanExtra("retroiso_touch_controls", false)) {
             retroIsoControlsOverlay = new com.elmagnifico.retroiso.runtime.winlator.RetroIsoControlsOverlay(
                 this, rootView, xServer, xServerView, touchpadView);
+            // Foreground service keeps the Wine process less likely to be
+            // reclaimed if Android sends the user to another app briefly.
+            try {
+                android.content.Intent session = new android.content.Intent(this,
+                    com.elmagnifico.retroiso.runtime.winlator.RetroIsoGameSessionService.class);
+                if (getIntent().getExtras() != null)
+                    session.putExtras(getIntent().getExtras());
+                startForegroundService(session);
+                retroIsoDiagnostics.append("RETROISO_SESSION: foreground requested");
+            } catch (RuntimeException ex) {
+                retroIsoDiagnostics.append("RETROISO_SESSION: foreground unavailable: " + ex);
+            }
         }
         AppUtils.observeSoftKeyboardVisibility(drawerLayout, renderer::setScreenOffsetYRelativeToCursor);'''
 if s.count(old) != 1:
@@ -425,12 +437,79 @@ s = s.replace(field_anchor, field, 1)
 destroy_anchor = '''    protected void onDestroy() {
         winHandler.stop();'''
 destroy = '''    protected void onDestroy() {
-        if (retroIsoControlsOverlay != null) retroIsoControlsOverlay.releaseHeldKeys();
+        if (retroIsoControlsOverlay != null) {
+            retroIsoControlsOverlay.releaseHeldKeys();
+            stopService(new android.content.Intent(this,
+                com.elmagnifico.retroiso.runtime.winlator.RetroIsoGameSessionService.class));
+        }
         winHandler.stop();'''
 if s.count(destroy_anchor) != 1:
     raise SystemExit("Retro ISO overlay lifecycle destroy patch point not found")
 s = s.replace(destroy_anchor, destroy, 1)
 p.write_text(s)
+PY
+
+# Correct the color-channel ordering of the emulated DirectDraw framebuffer
+# only when the player opts in via Gangsters 2 overlay. Rendering remains VirGL.
+python3 - \
+  "$RUNTIME_DIR/app/src/main/java/com/winlator/renderer/GLRenderer.java" \
+  "$RUNTIME_DIR/app/src/main/java/com/winlator/renderer/material/WindowMaterial.java" <<'PY'
+from pathlib import Path
+import sys
+
+renderer_path = Path(sys.argv[1])
+renderer = renderer_path.read_text()
+frag_field = '    private boolean forceWindowsFullscreen;'
+new_field = '''    private volatile boolean retroIsoSwapRedBlue = false;
+    private boolean forceWindowsFullscreen;'''
+if renderer.count(frag_field) != 1:
+    raise SystemExit("Color renderer field anchor missing")
+renderer = renderer.replace(frag_field, new_field, 1)
+
+draw_anchor = '''        windowMaterial.use();
+        windowMaterial.setUniformVec2(windowMaterial.uniforms.viewSize, xServer.screenInfo.width, xServer.screenInfo.height);'''
+draw_patch = '''        windowMaterial.use();
+        windowMaterial.setUniformBool(windowMaterial.uniforms.retroIsoSwapRedBlue, retroIsoSwapRedBlue);
+        windowMaterial.setUniformVec2(windowMaterial.uniforms.viewSize, xServer.screenInfo.width, xServer.screenInfo.height);'''
+if renderer.count(draw_anchor) != 1:
+    raise SystemExit("Color renderer draw anchor missing")
+renderer = renderer.replace(draw_anchor, draw_patch, 1)
+
+method_anchor = '''    private void renderWindows() {'''
+method_patch = '''    // Toggle available in Gangsters 2 only; default renderer is unmodified.
+    public void setRetroIsoSwapRedBlue(boolean enabled) {
+        retroIsoSwapRedBlue = enabled;
+        xServerView.requestRender();
+    }
+
+    private void renderWindows() {'''
+if renderer.count(method_anchor) != 1:
+    raise SystemExit("Color renderer method anchor missing")
+renderer = renderer.replace(method_anchor, method_patch, 1)
+renderer_path.write_text(renderer)
+
+material_path = Path(sys.argv[2])
+material = material_path.read_text()
+uniform_anchor = '        public final Uniform noAlpha = new Uniform("noAlpha");'
+uniform_patch = '''        public final Uniform noAlpha = new Uniform("noAlpha");
+        public final Uniform retroIsoSwapRedBlue = new Uniform("retroIsoSwapRedBlue");'''
+if material.count(uniform_anchor) != 1:
+    raise SystemExit("Color uniform anchor missing")
+material = material.replace(uniform_anchor, uniform_patch, 1)
+
+shader_anchor = '            "uniform float noAlpha;",'
+shader_patch = '''            "uniform float noAlpha;",
+            "uniform bool retroIsoSwapRedBlue;",'''
+if material.count(shader_anchor) != 1:
+    raise SystemExit("Color shader uniform anchor missing")
+material = material.replace(shader_anchor, shader_patch, 1)
+
+color_anchor = '"gl_FragColor = vec4(texelColor.rgb, max(texelColor.a, noAlpha));",'
+color_patch = '"gl_FragColor = vec4(retroIsoSwapRedBlue ? texelColor.bgr : texelColor.rgb, max(texelColor.a, noAlpha));",'
+if material.count(color_anchor) != 1:
+    raise SystemExit("Color fragment output anchor missing")
+material = material.replace(color_anchor, color_patch, 1)
+material_path.write_text(material)
 PY
 
 echo "Winlator sources prepared at $RUNTIME_DIR ($PIN) with Retro ISO diagnostics"
